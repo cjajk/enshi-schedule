@@ -77,16 +77,31 @@ class ZhengFangClient(private val baseUrl: String) {
 
             client.newCall(req).execute().use { resp ->
                 val body = resp.body?.string() ?: return LoginResult(false, "登录响应为空")
-                val stillLoginPage = body.contains("login_slogin.html") && !body.contains("index_")
-                return if (stillLoginPage) {
-                    LoginResult(false, "登录失败：账号或密码错误")
-                } else {
-                    LoginResult(true, "登录成功")
+                // 优先识别明确的错误关键字
+                extractLoginError(body)?.let { return LoginResult(false, it) }
+                // 若仍停留在登录页（未跳转 index），判定失败，并提示可能的验证码
+                val stillOnLogin = body.contains("login_slogin.html") && !body.contains("index_")
+                if (stillOnLogin) {
+                    return LoginResult(false, "登录未成功：请检查账号密码；若登录页出现验证码，请先在网页登录一次")
                 }
+                return LoginResult(true, "登录成功")
             }
         } catch (e: Exception) {
             return LoginResult(false, "登录异常：" + (e.message ?: e.javaClass.simpleName))
         }
+    }
+
+    /** 从登录响应中识别明确的错误关键字 */
+    private fun extractLoginError(body: String): String? {
+        val markers = listOf(
+            "用户名或密码不正确" to "账号或密码错误",
+            "密码错误" to "密码错误",
+            "验证码错误" to "验证码错误",
+            "请输入验证码" to "需要输入验证码，请先在网页登录一次再使用本应用",
+            "用户不存在" to "账号不存在"
+        )
+        for ((kw, msg) in markers) if (body.contains(kw)) return msg
+        return null
     }
 
     fun fetchSchedule(xnm: String, xqm: String): ScheduleRaw? {

@@ -32,6 +32,10 @@ jobs:
           "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" >/dev/null 2>&1 || true
           echo "ANDROID_HOME=${ANDROID_HOME}"
 
+      - name: Run unit tests
+        run: |
+          gradle testDebugUnitTest --no-daemon
+
       - name: Build Debug APK
         run: |
           gradle assembleDebug --no-daemon

@@ -28,7 +28,11 @@ class ScheduleRefreshWorker(
 
         val client = ZhengFangClient(baseUrl)
         val login = client.login(credentials.first, credentials.second)
-        if (!login.ok) return Result.retry()
+        if (!login.ok) {
+            // 明确的身份/验证码类错误 -> 永久失败（提醒用户），网络类 -> 稍后重试
+            val authError = login.message.contains("密码") || login.message.contains("账号") || login.message.contains("验证码")
+            return if (authError) Result.failure() else Result.retry()
+        }
 
         val raw = client.fetchSchedule(xnm, TermMap.toCode(term)) ?: return Result.retry()
         val arr = JSONArray()
