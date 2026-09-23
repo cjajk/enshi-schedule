@@ -44,6 +44,12 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/** 刷新结果：区分成功与失败，避免在主线程做网络 IO */
+private sealed class RefreshOutcome {
+    class Ok(val courses: List<Course>, val changed: Boolean, val fetchedAt: Long) : RefreshOutcome()
+    class Fail(val message: String) : RefreshOutcome()
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScheduleApp() {
@@ -101,32 +107,39 @@ fun ScheduleApp() {
     suspend fun doRefresh() {
         busy = true
         status = "正在登录教务系统..."
-        try {
-            val client = ZhengFangClient(baseUrl.ifBlank { repo.defaultBaseUrl })
-            val login = client.login(username, password)
-            if (!login.ok) {
-                status = login.message
-                return
+        // 网络请求与 DataStore 落盘是 IO 阻塞操作，必须在 IO 线程；UI 状态回到主线程更新
+        val outcome = try {
+            withContext(Dispatchers.IO) {
+                val client = ZhengFangClient(baseUrl.ifBlank { repo.defaultBaseUrl })
+                val login = client.login(username, password)
+                if (!login.ok) {
+                    RefreshOutcome.Fail(login.message)
+                } else {
+                    val raw = client.fetchSchedule(xnm, TermMap.toCode(term))
+                    if (raw == null) {
+                        RefreshOutcome.Fail("未获取到课表数据，请检查学年学期")
+                    } else {
+                        val arr = JSONArray()
+                        raw.kbList.forEach { arr.put(it) }
+                        val parsed = ScheduleParser.parseKbList(arr)
+                        val snapshot = ScheduleSnapshot(raw.xnm, raw.xqm, parsed, System.currentTimeMillis())
+                        val changed = repo.saveSnapshot(snapshot)
+                        RefreshOutcome.Ok(parsed, changed, snapshot.fetchedAt)
+                    }
+                }
             }
-            status = "登录成功，正在拉取课表..."
-            val raw = client.fetchSchedule(xnm, TermMap.toCode(term))
-            if (raw == null) {
-                status = "未获取到课表数据，请检查学年学期"
-                return
-            }
-            val arr = JSONArray()
-            raw.kbList.forEach { arr.put(it) }
-            val parsed = ScheduleParser.parseKbList(arr)
-            val snapshot = ScheduleSnapshot(raw.xnm, raw.xqm, parsed, System.currentTimeMillis())
-            val changed = repo.saveSnapshot(snapshot)
-            courses = parsed
-            lastFetched = formatTime(snapshot.fetchedAt)
-            status = if (changed) "课表有变动，已更新" else "课表已更新（无变动）"
         } catch (e: Exception) {
-            status = "刷新失败：" + (e.message ?: e.javaClass.simpleName)
-        } finally {
-            busy = false
+            RefreshOutcome.Fail("刷新失败：" + (e.message ?: e.javaClass.simpleName))
         }
+        when (outcome) {
+            is RefreshOutcome.Ok -> {
+                courses = outcome.courses
+                lastFetched = formatTime(outcome.fetchedAt)
+                status = if (outcome.changed) "课表有变动，已更新" else "课表已更新（无变动）"
+            }
+            is RefreshOutcome.Fail -> status = outcome.message
+        }
+        busy = false
     }
 
     fun saveAndSchedule() {
