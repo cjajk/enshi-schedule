@@ -42,6 +42,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScheduleApp() {
     val context = LocalContext.current
@@ -83,7 +84,7 @@ fun ScheduleApp() {
         courses = repo.getSavedCourses()
         dailyOn = withContext(Dispatchers.IO) {
             try {
-                WorkManager.getInstance(context).getWorkInfosByTag("daily_schedule_refresh").execute().get()
+                WorkManager.getInstance(context).getWorkInfosByTag("daily_schedule_refresh").get()
                     .any { !it.state.isFinished }
             } catch (e: Exception) { false }
         }

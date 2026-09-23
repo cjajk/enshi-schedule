@@ -110,15 +110,17 @@ class ZhengFangClient(private val baseUrl: String) {
                 .build()
             try {
                 client.newCall(req).execute().use { resp ->
-                    val text = resp.body?.string() ?: continue
-                    val j = JSONObject(text)
-                    if (j.has("kbList")) {
-                        val arr = j.getJSONArray("kbList")
-                        val list = (0 until arr.length()).map { arr.getJSONObject(it) }
-                        return ScheduleRaw(xnm, xqm, list)
+                    val text = resp.body?.string()
+                    if (text != null) {
+                        val j = JSONObject(text)
+                        if (j.has("kbList")) {
+                            val arr = j.getJSONArray("kbList")
+                            val list = (0 until arr.length()).map { arr.getJSONObject(it) }
+                            return ScheduleRaw(xnm, xqm, list)
+                        }
                     }
                 }
-            } catch (e: Exception) { }
+            } catch (e: Exception) { /* 尝试下一个候选接口 */ }
         }
         return null
     }

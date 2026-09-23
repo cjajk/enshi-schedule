@@ -8,6 +8,8 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.hbesxy.schedule.model.Course
 import com.hbesxy.schedule.model.ScheduleSnapshot
 import kotlinx.coroutines.flow.first
+import org.json.JSONArray
+import org.json.JSONObject
 
 private val Context.dataStore by preferencesDataStore(name = "schedule_prefs")
 
