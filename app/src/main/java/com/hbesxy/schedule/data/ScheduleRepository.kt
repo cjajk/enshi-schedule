@@ -13,6 +13,10 @@ import org.json.JSONObject
 
 private val Context.dataStore by preferencesDataStore(name = "schedule_prefs")
 
+/**
+ * 本地数据仓库（DataStore）
+ * 保存：登录凭证、教务入口、学年学期、最近一次课表快照
+ */
 class ScheduleRepository(private val context: Context) {
 
     private object Keys {
@@ -63,6 +67,7 @@ class ScheduleRepository(private val context: Context) {
         )
     }
 
+    /** 保存快照，返回是否相对上次有变动 */
     suspend fun saveSnapshot(snapshot: ScheduleSnapshot): Boolean {
         val p = context.dataStore.data.first()
         val old = p[Keys.SNAPSHOT_JSON]
@@ -93,6 +98,7 @@ class ScheduleRepository(private val context: Context) {
         return p[Keys.FETCHED_AT] ?: 0L
     }
 
+    /** 读取最近一次保存的课表（供打开 App 时直接展示） */
     suspend fun getSavedCourses(): List<Course>? {
         val p = context.dataStore.data.first()
         val json = p[Keys.SNAPSHOT_JSON] ?: return null
@@ -111,10 +117,11 @@ class ScheduleRepository(private val context: Context) {
         } catch (e: Exception) { null }
     }
 
-    /**
-     * 旧快照指纹：必须与 [Course.fingerprint] / [ScheduleSnapshot.fingerprint] 的拼接格式完全一致，
-     * 否则新旧永不相等，导致每次刷新都误报“有变动”。
-     */
+    /** 退出登录：清空全部本地数据（账密、配置、课表快照） */
+    suspend fun clearAll() {
+        context.dataStore.edit { it.clear() }
+    }
+
     private fun computeFingerprint(json: String): String {
         return try {
             val arr = JSONArray(json)
@@ -125,16 +132,10 @@ class ScheduleRepository(private val context: Context) {
                     it.optString("teacher"),
                     it.optString("position"),
                     it.optInt("day"),
-                    jsonToIntList(it.optJSONArray("weeks")),
-                    jsonToIntList(it.optJSONArray("sections"))
+                    it.optJSONArray("weeks").toString(),
+                    it.optJSONArray("sections").toString()
                 ).joinToString("|")
             }.sorted().joinToString("\n")
         } catch (e: Exception) { json }
-    }
-
-    /** JSON 数组 -> 逗号拼接（与 Course.fingerprint 的 weeks.joinToString(",") 一致） */
-    private fun jsonToIntList(j: JSONArray?): String {
-        if (j == null) return ""
-        return (0 until j.length()).map { j.getInt(it) }.joinToString(",")
     }
 }
