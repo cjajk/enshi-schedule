@@ -155,13 +155,14 @@ fun ScheduleApp() {
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp)
             ) {
-                if (crashLog != null) {
+                val crash = crashLog
+                if (crash != null) {
                     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                         Column(Modifier.padding(12.dp)) {
                             Text("上次崩溃日志（请截图整段发我）", style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.error)
                             Spacer(Modifier.height(4.dp))
-                            Text(crashLog.take(1500), style = MaterialTheme.typography.bodySmall,
+                            Text(crash.take(1500), style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error)
                             Spacer(Modifier.height(4.dp))
                             TextButton(onClick = { crashLog = null; CrashLogger.clear(context) }) {
