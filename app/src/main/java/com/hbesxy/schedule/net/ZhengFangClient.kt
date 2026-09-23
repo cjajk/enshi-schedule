@@ -1,5 +1,6 @@
 package com.hbesxy.schedule.net
 
+import android.util.Log
 import com.hbesxy.schedule.model.LoginResult
 import com.hbesxy.schedule.model.ScheduleRaw
 import okhttp3.Cookie
@@ -11,9 +12,23 @@ import okhttp3.Request
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-class ZhengFangClient(private val baseUrl: String) {
+/**
+ * 正方教务系统客户端（jwglxt / zftal-ui-v5）
+ * --------------------------------------------------
+ * 实现流程：获取登录页(拿 csrftoken) -> 获取 RSA 公钥 -> 加密密码登录 -> 维持 cookie -> 拉课表
+ * 教务入口：http://jw.hbesxy.net/jwglxt/
+ */
+class ZhengFangClient(baseUrl: String) {
 
-    private val jwglxt = baseUrl.trimEnd('/') + "/jwglxt"
+    private val jwglxt = normalizeBaseUrl(baseUrl) + "/jwglxt"
+
+    /** 规范化教务入口：去所有空白字符、补全 scheme、非法回退官方地址 */
+    private fun normalizeBaseUrl(raw: String): String {
+        var s = raw.trim().replace(Regex("\\s+"), "")
+        if (s.isEmpty()) s = "http://jw.hbesxy.net"
+        if (!s.startsWith("http://") && !s.startsWith("https://")) s = "http://$s"
+        return s.trimEnd('/')
+    }
 
     private val client = OkHttpClient.Builder()
         .cookieJar(SimpleCookieJar())
@@ -22,6 +37,7 @@ class ZhengFangClient(private val baseUrl: String) {
         .followRedirects(true)
         .build()
 
+    /** 1. 获取登录页并解析出 csrftoken */
     private fun fetchCsrfToken(): String? {
         val req = Request.Builder().url("$jwglxt/xtgl/login_slogin.html").build()
         client.newCall(req).execute().use { resp ->
@@ -43,6 +59,7 @@ class ZhengFangClient(private val baseUrl: String) {
         return null
     }
 
+    /** 2. 获取 RSA 公钥 (modulus, exponent) */
     private fun fetchPublicKey(): Pair<String, String>? {
         val req = Request.Builder().url("$jwglxt/xtgl/login_getPublicKey.html").build()
         client.newCall(req).execute().use { resp ->
@@ -55,6 +72,7 @@ class ZhengFangClient(private val baseUrl: String) {
         return null
     }
 
+    /** 登录；成功后 client 已持有会话 cookie */
     fun login(username: String, password: String): LoginResult {
         try {
             val csrf = fetchCsrfToken()
@@ -77,9 +95,7 @@ class ZhengFangClient(private val baseUrl: String) {
 
             client.newCall(req).execute().use { resp ->
                 val body = resp.body?.string() ?: return LoginResult(false, "登录响应为空")
-                // 优先识别明确的错误关键字
                 extractLoginError(body)?.let { return LoginResult(false, it) }
-                // 若仍停留在登录页（未跳转 index），判定失败，并提示可能的验证码
                 val stillOnLogin = body.contains("login_slogin.html") && !body.contains("index_")
                 if (stillOnLogin) {
                     return LoginResult(false, "登录未成功：请检查账号密码；若登录页出现验证码，请先在网页登录一次")
@@ -87,6 +103,7 @@ class ZhengFangClient(private val baseUrl: String) {
                 return LoginResult(true, "登录成功")
             }
         } catch (e: Exception) {
+            Log.e("EnShiSchedule", "登录异常", e)
             return LoginResult(false, "登录异常：" + (e.message ?: e.javaClass.simpleName))
         }
     }
@@ -104,6 +121,7 @@ class ZhengFangClient(private val baseUrl: String) {
         return null
     }
 
+    /** 拉取课表原始数据（需先登录） */
     fun fetchSchedule(xnm: String, xqm: String): ScheduleRaw? {
         val form = FormBody.Builder()
             .add("xnm", xnm)
@@ -141,6 +159,7 @@ class ZhengFangClient(private val baseUrl: String) {
     }
 }
 
+/** 简易内存 cookie 容器（每次登录重新建立会话） */
 private class SimpleCookieJar : CookieJar {
     private val store = HashMap<String, MutableList<Cookie>>()
     override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
