@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 及以下的全量备份规则：排除存有密码的 DataStore 文件，避免明文密码上云 -->
+<full-backup-content>
+    <exclude domain="file" path="datastore/" />
+</full-backup-content>

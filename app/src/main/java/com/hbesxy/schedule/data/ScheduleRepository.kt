@@ -111,6 +111,10 @@ class ScheduleRepository(private val context: Context) {
         } catch (e: Exception) { null }
     }
 
+    /**
+     * 旧快照指纹：必须与 [Course.fingerprint] / [ScheduleSnapshot.fingerprint] 的拼接格式完全一致，
+     * 否则新旧永不相等，导致每次刷新都误报“有变动”。
+     */
     private fun computeFingerprint(json: String): String {
         return try {
             val arr = JSONArray(json)
@@ -121,10 +125,16 @@ class ScheduleRepository(private val context: Context) {
                     it.optString("teacher"),
                     it.optString("position"),
                     it.optInt("day"),
-                    it.optJSONArray("weeks").toString(),
-                    it.optJSONArray("sections").toString()
+                    jsonToIntList(it.optJSONArray("weeks")),
+                    jsonToIntList(it.optJSONArray("sections"))
                 ).joinToString("|")
             }.sorted().joinToString("\n")
         } catch (e: Exception) { json }
+    }
+
+    /** JSON 数组 -> 逗号拼接（与 Course.fingerprint 的 weeks.joinToString(",") 一致） */
+    private fun jsonToIntList(j: JSONArray?): String {
+        if (j == null) return ""
+        return (0 until j.length()).map { j.getInt(it) }.joinToString(",")
     }
 }
