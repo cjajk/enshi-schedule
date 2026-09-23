@@ -7,6 +7,7 @@ import org.junit.Test
 
 /**
  * 课表解析单元测试（纯 JVM，等价平移自 JS 版 test-parser.js）
+ * 注意：正方教务 jcs 为四位数，如 “0102”=第1、2节、“0506”=第5、6节。
  */
 class ScheduleParserTest {
 
@@ -45,16 +46,21 @@ class ScheduleParserTest {
 
     @Test
     fun parseEvenWeeks() {
-        val arr = JSONArray().put(item("实验", 5, "56", "2-10周(双)"))
+        val arr = JSONArray().put(item("实验", 5, "0506", "2-10周(双)"))
         val out = ScheduleParser.parseKbList(arr)
+        assertEquals(1, out.size)
+        assertEquals(listOf(5, 6), out[0].sections)
         assertEquals(listOf(2, 4, 6, 8, 10), out[0].weeks)
     }
 
     @Test
     fun parseSegmentedOddWeeks() {
-        val arr = JSONArray().put(item("讲座", 4, "78", "1-8周,10-16周(单)"))
+        val arr = JSONArray().put(item("讲座", 4, "0708", "1-8周,10-16周(单)"))
         val out = ScheduleParser.parseKbList(arr)
-        assertEquals((1..8).filter { it % 2 == 1 } + (10..16).filter { it % 2 == 1 }, out[0].weeks)
+        assertEquals(1, out.size)
+        assertEquals(listOf(7, 8), out[0].sections)
+        // 第一段 “1-8周” 无单双标记，整段保留；第二段 “10-16周(单)” 只留奇数周
+        assertEquals((1..8).toList() + listOf(11, 13, 15), out[0].weeks)
     }
 
     @Test
