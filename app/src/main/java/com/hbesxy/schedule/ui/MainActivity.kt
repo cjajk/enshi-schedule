@@ -98,26 +98,26 @@ fun ScheduleApp() {
         busy = true
         status = "正在登录教务系统..."
         try {
-            val client = ZhengFangClient(baseUrl.ifBlank { repo.defaultBaseUrl })
-            val login = client.login(username, password)
-            if (!login.ok) {
-                status = login.message
-                return
+            // 网络请求、解析、落盘全部放到 IO 线程，避免 NetworkOnMainThreadException
+            val (msg, snapshot) = withContext(Dispatchers.IO) {
+                val client = ZhengFangClient(baseUrl.ifBlank { repo.defaultBaseUrl })
+                val login = client.login(username, password)
+                if (!login.ok) return@withContext login.message to null as ScheduleSnapshot?
+                val raw = client.fetchSchedule(xnm, TermMap.toCode(term))
+                if (raw == null) return@withContext "未获取到课表数据，请检查学年学期" to null as ScheduleSnapshot?
+                val arr = JSONArray()
+                raw.kbList.forEach { arr.put(it) }
+                val parsed = ScheduleParser.parseKbList(arr)
+                val snapshot = ScheduleSnapshot(raw.xnm, raw.xqm, parsed, System.currentTimeMillis())
+                val changed = repo.saveSnapshot(snapshot)
+                val m = if (changed) "课表有变动，已更新" else "课表已更新（无变动）"
+                m to snapshot
             }
-            status = "登录成功，正在拉取课表..."
-            val raw = client.fetchSchedule(xnm, TermMap.toCode(term))
-            if (raw == null) {
-                status = "未获取到课表数据，请检查学年学期"
-                return
+            if (snapshot != null) {
+                courses = snapshot.courses
+                lastFetched = formatTime(snapshot.fetchedAt)
             }
-            val arr = JSONArray()
-            raw.kbList.forEach { arr.put(it) }
-            val parsed = ScheduleParser.parseKbList(arr)
-            val snapshot = ScheduleSnapshot(raw.xnm, raw.xqm, parsed, System.currentTimeMillis())
-            val changed = repo.saveSnapshot(snapshot)
-            courses = parsed
-            lastFetched = formatTime(snapshot.fetchedAt)
-            status = if (changed) "课表有变动，已更新" else "课表已更新（无变动）"
+            status = msg
         } catch (e: Exception) {
             status = "刷新失败：" + (e.message ?: e.javaClass.simpleName)
         } finally {
