@@ -25,6 +25,7 @@ import com.hbesxy.schedule.model.TermMap
 import com.hbesxy.schedule.net.ZhengFangClient
 import com.hbesxy.schedule.notify.ChangeNotifier
 import com.hbesxy.schedule.parser.ScheduleParser
+import com.hbesxy.schedule.util.CrashLogger
 import com.hbesxy.schedule.worker.ScheduleRefreshWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -37,7 +38,8 @@ import java.util.Locale
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ChangeNotifier.ensureChannel(this)
+        try { ChangeNotifier.ensureChannel(this) } catch (_: Exception) {}
+        CrashLogger.install(this)
         setContent { ScheduleApp() }
     }
 }
@@ -67,27 +69,33 @@ fun ScheduleApp() {
     var busy by remember { mutableStateOf(false) }
     var dailyOn by remember { mutableStateOf(false) }
     var lastFetched by remember { mutableStateOf("从未刷新") }
+    var crashLog by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        val (b, x, t) = repo.getConfig()
-        baseUrl = b
-        xnm = x
-        term = t
-        val cred = repo.getCredentials()
-        if (cred != null) {
-            username = cred.first
-            password = cred.second
-            loggedIn = true
+        try {
+            val (b, x, t) = repo.getConfig()
+            baseUrl = b
+            xnm = x
+            term = t
+            val cred = repo.getCredentials()
+            if (cred != null) {
+                username = cred.first
+                password = cred.second
+                loggedIn = true
+            }
+            val at = repo.getLastFetchedAt()
+            if (at > 0) lastFetched = formatTime(at)
+            courses = repo.getSavedCourses()
+            dailyOn = withContext(Dispatchers.IO) {
+                try {
+                    WorkManager.getInstance(context).getWorkInfosByTag("daily_schedule_refresh").get()
+                        .any { !it.state.isFinished }
+                } catch (e: Exception) { false }
+            }
+        } catch (e: Exception) {
+            status = "加载本地数据失败：" + (e.message ?: e.javaClass.simpleName)
         }
-        val at = repo.getLastFetchedAt()
-        if (at > 0) lastFetched = formatTime(at)
-        courses = repo.getSavedCourses()
-        dailyOn = withContext(Dispatchers.IO) {
-            try {
-                WorkManager.getInstance(context).getWorkInfosByTag("daily_schedule_refresh").get()
-                    .any { !it.state.isFinished }
-            } catch (e: Exception) { false }
-        }
+        crashLog = CrashLogger.read(context)
     }
 
     suspend fun doRefresh() {
@@ -147,6 +155,22 @@ fun ScheduleApp() {
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp)
             ) {
+                if (crashLog != null) {
+                    Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text("上次崩溃日志（请截图整段发我）", style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.error)
+                            Spacer(Modifier.height(4.dp))
+                            Text(crashLog.take(1500), style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error)
+                            Spacer(Modifier.height(4.dp))
+                            TextButton(onClick = { crashLog = null; CrashLogger.clear(context) }) {
+                                Text("清除日志")
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
                 if (!loggedIn) {
                     LoginForm(
                         baseUrl = baseUrl, onBaseUrl = { baseUrl = it },
