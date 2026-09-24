@@ -94,6 +94,7 @@ class ZhengFangClient(baseUrl: String) {
             val pk = fetchPublicKey()
                 ?: return LoginResult(false, "无法获取 RSA 加密公钥")
             val encPwd = RsaUtil.encryptPassword(pwd, pk.first, pk.second)
+            Log.e("EnShiSchedule", "LOGIN user=$username pwd_len=${pwd.length} pwd_fullwidth=${pwd.any { it in '\uFF01'..'\uFF5E' }} csrf=$csrf mod=${pk.first.take(24)} exp=${pk.second} mm=${encPwd.take(24)}")
 
             val form = FormBody.Builder()
                 .add("csrftoken", csrf)
@@ -109,6 +110,13 @@ class ZhengFangClient(baseUrl: String) {
 
             client.newCall(req).execute().use { resp ->
                 val body = resp.body?.string() ?: return LoginResult(false, "登录响应为空")
+                Log.e("EnShiSchedule", "LOGIN resp code=${resp.code} len=${body.length} url=${resp.request.url}")
+                body.lines().forEach { line ->
+                    val t = line.trim()
+                    if (t.contains("用户名") || t.contains("密码") || t.contains("验证码") || t.contains("错误")) {
+                        Log.e("EnShiSchedule", "RESP: " + t.take(120))
+                    }
+                }
                 extractLoginError(body)?.let { return LoginResult(false, it) }
                 val stillOnLogin = body.contains("login_slogin.html") && !body.contains("index_")
                 if (stillOnLogin) {
