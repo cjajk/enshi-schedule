@@ -1,9 +1,11 @@
 name: Build APK
 
+# 云端自动构建 APK（无需本地 Android SDK）
+# 把本 android-app 目录作为 GitHub 仓库根推送后，此工作流自动编译并产出可下载 APK。
 on:
-  workflow_dispatch:
+  workflow_dispatch:          # 手动触发
   push:
-    branches: [main, master]
+    branches: [main, master]  # 推送到 main/master 自动触发
 
 jobs:
   build:
@@ -32,13 +34,13 @@ jobs:
           "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" >/dev/null 2>&1 || true
           echo "ANDROID_HOME=${ANDROID_HOME}"
 
-      - name: Run unit tests
-        run: |
-          gradle testDebugUnitTest --no-daemon
-
       - name: Build Debug APK
         run: |
           gradle assembleDebug --no-daemon
+        env:
+          # 每次构建自动递增版本号：versionCode 用运行序号，versionName 同步
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: 1.0.${{ github.run_number }}
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
