@@ -72,14 +72,28 @@ class ZhengFangClient(baseUrl: String) {
         return null
     }
 
+    /** 全角标点转半角（教务系统密码只认半角，全角感叹号/括号等会导致密码错误） */
+    private fun normalizePassword(s: String): String {
+        val sb = StringBuilder(s.length)
+        for (c in s) {
+            when {
+                c == '\u3000' -> sb.append(' ')          // 全角空格
+                c in '\uFF01'..'\uFF5E' -> sb.append((c - 0xFEE0).toChar())  // 全角标点/字母数字 → 半角
+                else -> sb.append(c)
+            }
+        }
+        return sb.toString()
+    }
+
     /** 登录；成功后 client 已持有会话 cookie */
     fun login(username: String, password: String): LoginResult {
         try {
+            val pwd = normalizePassword(password)
             val csrf = fetchCsrfToken()
                 ?: return LoginResult(false, "未解析到 csrftoken，教务登录页结构可能已变化")
             val pk = fetchPublicKey()
                 ?: return LoginResult(false, "无法获取 RSA 加密公钥")
-            val encPwd = RsaUtil.encryptPassword(password, pk.first, pk.second)
+            val encPwd = RsaUtil.encryptPassword(pwd, pk.first, pk.second)
 
             val form = FormBody.Builder()
                 .add("csrftoken", csrf)
