@@ -429,51 +429,124 @@ fun ScheduleScreen(
         }
         return
     }
-    Text(
-        "共 ${list.size} 门课程",
-        fontSize = 14.sp,
-        fontWeight = FontWeight.SemiBold,
-        color = Color(0xFF1C2438),
-        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
-    )
     val sorted = list.sortedWith(compareBy<Course> { it.day }.thenBy { it.sections.firstOrNull() ?: 0 })
     val dayNames = listOf("", "周一", "周二", "周三", "周四", "周五", "周六", "周日")
-    for (c in sorted) {
-        GlassCard(modifier = Modifier.padding(bottom = 10.dp)) {
-            Row(verticalAlignment = Alignment.Top) {
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .padding(top = 5.dp)
-                        .background(EnShiBlueLight, CircleShape)
+    // 视图切换：周视图（网格）/ 列表视图
+    var viewMode by remember { mutableStateOf("week") }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+        Text(
+            "共 ${list.size} 门课程",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFF1C2438),
+            modifier = Modifier.weight(1f).padding(start = 4.dp)
+        )
+        Row(
+            modifier = Modifier
+                .background(Color(0xFFE6EDF8), RoundedCornerShape(10.dp))
+                .padding(2.dp)
+        ) {
+            TextButton(
+                onClick = { viewMode = "week" },
+                modifier = Modifier
+                    .height(30.dp)
+                    .background(if (viewMode == "week") White else Color.Transparent, RoundedCornerShape(8.dp))
+            ) {
+                Text(
+                    "周视图", fontSize = 12.sp,
+                    color = if (viewMode == "week") EnShiBlue else Color(0xFF5A6680),
+                    fontWeight = if (viewMode == "week") FontWeight.SemiBold else FontWeight.Normal
                 )
-                Spacer(Modifier.width(12.dp))
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(c.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1C2438))
-                        Spacer(Modifier.weight(1f))
+            }
+            TextButton(
+                onClick = { viewMode = "list" },
+                modifier = Modifier
+                    .height(30.dp)
+                    .background(if (viewMode == "list") White else Color.Transparent, RoundedCornerShape(8.dp))
+            ) {
+                Text(
+                    "列表", fontSize = 12.sp,
+                    color = if (viewMode == "list") EnShiBlue else Color(0xFF5A6680),
+                    fontWeight = if (viewMode == "list") FontWeight.SemiBold else FontWeight.Normal
+                )
+            }
+        }
+    }
+    if (viewMode == "week") {
+        // ===== 周课表可视化网格 =====
+        GlassCard(modifier = Modifier.padding(bottom = 14.dp)) {
+            WeeklyScheduleGrid(list)
+        }
+        Text(
+            "课程明细",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFF1C2438),
+            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+        )
+        for (c in sorted) {
+            GlassCard(modifier = Modifier.padding(bottom = 10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(c.name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1C2438))
+                        Spacer(Modifier.height(4.dp))
                         Text(
-                            dayNames[c.day],
+                            "第 ${c.sections.joinToString("、")} 节 ｜ 第 ${c.weeks.joinToString("、")} 周 ｜ ${c.position.ifBlank { "地点待定" }}",
                             fontSize = 11.sp,
-                            color = EnShiBlueLight,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier
-                                .background(EnShiBlueLight.copy(alpha = 0.14f), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                            color = Color(0xFF5A6680)
                         )
                     }
-                    Spacer(Modifier.height(6.dp))
                     Text(
-                        "第 ${c.sections.joinToString("、")} 节 ｜ 第 ${c.weeks.joinToString("、")} 周",
-                        fontSize = 12.sp,
-                        color = Color(0xFF4A5568)
+                        dayNames[c.day],
+                        fontSize = 11.sp,
+                        color = EnShiBlueLight,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .background(EnShiBlueLight.copy(alpha = 0.14f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
                     )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "${c.position.ifBlank { "地点待定" }}  ·  ${c.teacher}",
-                        fontSize = 12.sp,
-                        color = Color(0xFF5A6680)
+                }
+            }
+        }
+    } else {
+        // ===== 原列表视图 =====
+        for (c in sorted) {
+            GlassCard(modifier = Modifier.padding(bottom = 10.dp)) {
+                Row(verticalAlignment = Alignment.Top) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .padding(top = 5.dp)
+                            .background(EnShiBlueLight, CircleShape)
                     )
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(c.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1C2438))
+                            Spacer(Modifier.weight(1f))
+                            Text(
+                                dayNames[c.day],
+                                fontSize = 11.sp,
+                                color = EnShiBlueLight,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier
+                                    .background(EnShiBlueLight.copy(alpha = 0.14f), RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "第 ${c.sections.joinToString("、")} 节 ｜ 第 ${c.weeks.joinToString("、")} 周",
+                            fontSize = 12.sp,
+                            color = Color(0xFF4A5568)
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "${c.position.ifBlank { "地点待定" }}  ·  ${c.teacher}",
+                            fontSize = 12.sp,
+                            color = Color(0xFF5A6680)
+                        )
+                    }
                 }
             }
         }
