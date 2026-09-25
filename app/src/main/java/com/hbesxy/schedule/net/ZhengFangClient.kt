@@ -193,12 +193,12 @@ private class SimpleCookieJar : CookieJar {
     override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
         val m = store.getOrPut(url.host) { HashMap() }
         for (c in cookies) {
-            if (c.expiresAt() < System.currentTimeMillis()) continue  // 丢弃过期/删除标记
+            if (c.expiresAt < System.currentTimeMillis()) continue  // 丢弃过期/删除标记
             m[c.name] = c
         }
     }
     override fun loadForRequest(url: HttpUrl): List<Cookie> =
-        store[url.host]?.values?.filter { it.expiresAt() >= System.currentTimeMillis() } ?: emptyList()
+        store[url.host]?.values?.filter { it.expiresAt >= System.currentTimeMillis() } ?: emptyList()
 
     fun describe(): String {
         if (store.isEmpty()) return "EMPTY"
