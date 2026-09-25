@@ -108,9 +108,14 @@ class ZhengFangClient(baseUrl: String) {
                 .header("X-Requested-With", "XMLHttpRequest")
                 .build()
 
+            Log.e("EnShiSchedule", "COOKIES=${(client.cookieJar as SimpleCookieJar).describe()}")
+            Log.e("EnShiSchedule", "BODY csrftoken=$csrf yhm=$username mm=$encPwd")
+
             client.newCall(req).execute().use { resp ->
                 val body = resp.body?.string() ?: return LoginResult(false, "登录响应为空")
                 Log.e("EnShiSchedule", "LOGIN resp code=${resp.code} len=${body.length} url=${resp.request.url}")
+                Log.e("EnShiSchedule", "RESPCODE up=${body.contains("updatePassword")} idx=${body.contains("index_")} pwderr=${body.contains("用户名或密码不正确")}")
+                Log.e("EnShiSchedule", "RESPHEAD=" + body.take(900).replace("\n", " "))
                 body.lines().forEach { line ->
                     val t = line.trim()
                     if (t.contains("用户名") || t.contains("密码") || t.contains("验证码") || t.contains("错误")) {
@@ -192,4 +197,9 @@ private class SimpleCookieJar : CookieJar {
     }
     override fun loadForRequest(url: HttpUrl): List<Cookie> =
         store[url.host] ?: emptyList()
+
+    fun describe(): String {
+        if (store.isEmpty()) return "EMPTY"
+        return store.entries.joinToString(";") { (h, cs) -> h + "=" + cs.joinToString(",") { it.name() + ":" + it.value().take(12) } }
+    }
 }
