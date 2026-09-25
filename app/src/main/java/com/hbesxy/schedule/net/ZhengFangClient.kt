@@ -111,7 +111,10 @@ class ZhengFangClient(baseUrl: String) {
             client.newCall(req).execute().use { resp ->
                 val body = resp.body?.string() ?: return LoginResult(false, "登录响应为空")
                 Log.e("EnShiSchedule", "LOGIN resp code=${resp.code} len=${body.length} url=${resp.request.url}")
-                Log.e("EnShiSchedule", "RESPCODE up=${body.contains("updatePassword")} idx=${body.contains("index_")} pwderr=${body.contains("用户名或密码不正确")} cookie=${(client.cookieJar as SimpleCookieJar).describe()}")
+                val hasUp = body.contains("updatePassword")
+                val hasIdx = body.contains("index_")
+                val hasPwdErr = body.contains("用户名或密码不正确")
+                Log.e("EnShiSchedule", "RESPCODE up=$hasUp idx=$hasIdx pwderr=$hasPwdErr cookie=${(client.cookieJar as SimpleCookieJar).describe()}")
                 extractLoginError(body)?.let { return LoginResult(false, it) }
                 val stillOnLogin = body.contains("login_slogin.html") && !body.contains("index_")
                 if (stillOnLogin) {
