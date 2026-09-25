@@ -240,7 +240,7 @@ fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.()
         shape = RoundedCornerShape(22.dp),
         border = BorderStroke(1.dp, EnShiBlue.copy(alpha = 0.14f)),
         colors = CardDefaults.cardColors(containerColor = White.copy(alpha = 0.88f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp, shadowElevation = 6.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(modifier = Modifier.padding(20.dp), content = content)
     }
