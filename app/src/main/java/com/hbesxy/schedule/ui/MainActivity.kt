@@ -401,11 +401,14 @@ fun ScheduleScreen(
         Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             PrimaryButton(text = if (busy) "刷新中..." else "立即刷新课表", enabled = !busy, modifier = Modifier.weight(1f)) { onRefresh() }
-            OutlinedButton(
+            Button(
                 onClick = { showLogoutDialog = true },
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(16.dp),
-                colors = OutlinedButtonDefaults.colors(contentColor = EnShiBlue)
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.White.copy(alpha = 0.35f),
+                    contentColor = EnShiBlue
+                )
             ) {
                 Text("退出登录", fontWeight = FontWeight.Medium)
             }
