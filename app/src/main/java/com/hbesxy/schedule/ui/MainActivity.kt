@@ -1,5 +1,4 @@
 package com.hbesxy.schedule.ui
-
 import android.Manifest
 import android.os.Build
 import android.os.Bundle
@@ -7,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -43,12 +43,10 @@ import org.json.JSONArray
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
 /** 校徽深蓝主色 */
 val EnShiBlue = Color(0xFF123A6B)
 val EnShiBlueLight = Color(0xFF3B6FD4)
 val EnShiBlueSoft = Color(0xFF9DB7E8)
-
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,21 +54,18 @@ class MainActivity : ComponentActivity() {
         setContent { ScheduleApp() }
     }
 }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScheduleApp() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repo = remember { ScheduleRepository(context) }
-
     if (Build.VERSION.SDK_INT >= 33) {
         val launcher = rememberLauncherForActivityResult(
             ActivityResultContracts.RequestPermission()
         ) {}
         LaunchedEffect(Unit) { launcher.launch(Manifest.permission.POST_NOTIFICATIONS) }
     }
-
     var baseUrl by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -83,7 +78,6 @@ fun ScheduleApp() {
     var busy by remember { mutableStateOf(false) }
     var dailyOn by remember { mutableStateOf(false) }
     var lastFetched by remember { mutableStateOf("从未刷新") }
-
     LaunchedEffect(Unit) {
         val (b, x, t) = repo.getConfig()
         baseUrl = b
@@ -105,7 +99,6 @@ fun ScheduleApp() {
             } catch (e: Exception) { false }
         }
     }
-
     suspend fun doRefresh() {
         busy = true
         status = "正在登录教务系统..."
@@ -135,7 +128,6 @@ fun ScheduleApp() {
             busy = false
         }
     }
-
     fun saveAndSchedule() {
         scope.launch {
             repo.saveCredentials(username, password)
@@ -145,7 +137,6 @@ fun ScheduleApp() {
             doRefresh()
         }
     }
-
     fun logout() {
         scope.launch {
             repo.clearAll()
@@ -159,14 +150,13 @@ fun ScheduleApp() {
             lastFetched = "从未刷新"
         }
     }
-
-    // 苹果风：柔和蓝白渐变玻璃背景
+    // 简约苹果风：柔和蓝白渐变背景（浅、通透、不刺眼）
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    listOf(Color(0xFFEAF1FF), Color(0xFFF8FBFF), Color(0xFFE8F0FF))
+                    listOf(Color(0xFFE9F1FF), Color(0xFFF7FAFF), Color(0xFFEDF3FF))
                 )
             )
     ) {
@@ -211,8 +201,7 @@ fun ScheduleApp() {
         }
     }
 }
-
-/** 顶部玻璃标题栏 */
+/** 顶部渐变标题栏 */
 @Composable
 fun HeaderBar() {
     Box(
@@ -220,44 +209,43 @@ fun HeaderBar() {
             .fillMaxWidth()
             .background(
                 Brush.horizontalGradient(
-                    listOf(EnShiBlueLight.copy(alpha = 0.75f), EnShiBlue.copy(alpha = 0.85f))
+                    listOf(EnShiBlueLight, EnShiBlue)
                 ),
-                RoundedCornerShape(24.dp)
+                RoundedCornerShape(26.dp)
             )
-            .padding(vertical = 18.dp)
+            .padding(vertical = 20.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 "恩施学院课表",
                 color = White,
-                fontSize = 20.sp,
+                fontSize = 21.sp,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = 0.5.sp
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 "正方教务系统 · 每日自动同步",
-                color = White.copy(alpha = 0.75f),
+                color = White.copy(alpha = 0.82f),
                 fontSize = 12.sp
             )
         }
     }
 }
-
-/** 毛玻璃卡片 */
+/** 简约卡片：白色半透明 + 清晰浅蓝描边 + 柔和阴影（保留玻璃质感但可读） */
 @Composable
 fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = White.copy(alpha = 0.60f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(1.dp, EnShiBlue.copy(alpha = 0.14f)),
+        colors = CardDefaults.cardColors(containerColor = White.copy(alpha = 0.88f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp, shadowElevation = 6.dp)
     ) {
         Column(modifier = Modifier.padding(20.dp), content = content)
     }
 }
-
-/** 玻璃输入框 */
+/** 输入框：始终有清晰边框（未聚焦半透明蓝、聚焦深蓝），容器高对比度 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GlassTextField(
@@ -275,23 +263,22 @@ fun GlassTextField(
         modifier = modifier,
         label = { Text(label, fontSize = 13.sp) },
         singleLine = singleLine,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         visualTransformation = visualTransformation,
         trailingIcon = trailingIcon,
         colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = EnShiBlue.copy(alpha = 0.7f),
-            unfocusedBorderColor = Color.Transparent,
-            focusedContainerColor = White.copy(alpha = 0.55f),
-            unfocusedContainerColor = White.copy(alpha = 0.45f),
+            focusedBorderColor = EnShiBlue,
+            unfocusedBorderColor = EnShiBlue.copy(alpha = 0.32f),
+            focusedContainerColor = White.copy(alpha = 0.97f),
+            unfocusedContainerColor = White.copy(alpha = 0.92f),
             focusedLabelColor = EnShiBlue,
-            unfocusedLabelColor = Color(0xFF7C87A6),
+            unfocusedLabelColor = Color(0xFF5A6680),
             cursorColor = EnShiBlue,
             focusedTextColor = Color(0xFF1C2438),
             unfocusedTextColor = Color(0xFF1C2438)
         )
     )
 }
-
 /** 主渐变按钮 */
 @Composable
 fun PrimaryButton(text: String, enabled: Boolean = true, modifier: Modifier = Modifier, onClick: () -> Unit) {
@@ -299,18 +286,17 @@ fun PrimaryButton(text: String, enabled: Boolean = true, modifier: Modifier = Mo
         onClick = onClick,
         enabled = enabled,
         modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = EnShiBlue,
             contentColor = White,
             disabledContainerColor = EnShiBlue.copy(alpha = 0.4f)
         ),
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp)
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
     ) {
         Text(text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
     }
 }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginForm(
@@ -334,7 +320,7 @@ fun LoginForm(
         Text(
             "输入正方教务账号密码，自动拉取最新课表",
             fontSize = 12.sp,
-            color = Color(0xFF7C87A6)
+            color = Color(0xFF5A6680)
         )
         Spacer(Modifier.height(20.dp))
         GlassTextField(value = baseUrl, onValueChange = onBaseUrl, modifier = Modifier.fillMaxWidth(), label = "教务地址")
@@ -361,13 +347,12 @@ fun LoginForm(
         Text(
             "账密仅保存在本机 · 学期 1=秋季 / 2=春季 / 3=短学期",
             fontSize = 11.sp,
-            color = Color(0xFF7C87A6),
+            color = Color(0xFF5A6680),
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
         )
     }
 }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScheduleScreen(
@@ -381,11 +366,10 @@ fun ScheduleScreen(
     onLogout: () -> Unit
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
-
     GlassCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("上次刷新", fontSize = 12.sp, color = Color(0xFF7C87A6))
+                Text("上次刷新", fontSize = 12.sp, color = Color(0xFF5A6680))
                 Spacer(Modifier.height(2.dp))
                 Text(lastFetched, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color(0xFF1C2438))
             }
@@ -404,9 +388,10 @@ fun ScheduleScreen(
             Button(
                 onClick = { showLogoutDialog = true },
                 modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, EnShiBlue.copy(alpha = 0.25f)),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.White.copy(alpha = 0.35f),
+                    containerColor = Color.White.copy(alpha = 0.6f),
                     contentColor = EnShiBlue
                 )
             ) {
@@ -415,10 +400,10 @@ fun ScheduleScreen(
         }
         if (status.isNotBlank()) {
             Spacer(Modifier.height(12.dp))
-            Text(status, fontSize = 12.sp, color = if (status.startsWith("刷新失败") || status.contains("不正确")) Color(0xFFD3545C) else EnShiBlueLight)
+            Text(status, fontSize = 12.sp,
+                color = if (status.startsWith("刷新失败") || status.contains("不正确")) Color(0xFFD3545C) else EnShiBlueLight)
         }
     }
-
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
@@ -432,7 +417,6 @@ fun ScheduleScreen(
             }
         )
     }
-
     Spacer(Modifier.height(16.dp))
     val list = courses
     if (list == null) {
@@ -440,7 +424,7 @@ fun ScheduleScreen(
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                 Text("尚未拉取课表", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color(0xFF1C2438))
                 Spacer(Modifier.height(6.dp))
-                Text("点击「立即刷新课表」获取最新安排", fontSize = 12.sp, color = Color(0xFF7C87A6))
+                Text("点击「立即刷新课表」获取最新安排", fontSize = 12.sp, color = Color(0xFF5A6680))
             }
         }
         return
@@ -482,19 +466,18 @@ fun ScheduleScreen(
                     Text(
                         "第 ${c.sections.joinToString("、")} 节 ｜ 第 ${c.weeks.joinToString("、")} 周",
                         fontSize = 12.sp,
-                        color = Color(0xFF5A6680)
+                        color = Color(0xFF4A5568)
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
                         "${c.position.ifBlank { "地点待定" }}  ·  ${c.teacher}",
                         fontSize = 12.sp,
-                        color = Color(0xFF7C87A6)
+                        color = Color(0xFF5A6680)
                     )
                 }
             }
         }
     }
 }
-
 private fun formatTime(ms: Long): String =
     SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(ms))
