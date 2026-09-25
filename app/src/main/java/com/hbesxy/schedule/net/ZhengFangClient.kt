@@ -94,7 +94,7 @@ class ZhengFangClient(baseUrl: String) {
             val pk = fetchPublicKey()
                 ?: return LoginResult(false, "无法获取 RSA 加密公钥")
             val encPwd = RsaUtil.encryptPassword(pwd, pk.first, pk.second)
-            Log.e("EnShiSchedule", "LOGIN user=$username pwd_len=${pwd.length} pwd_fullwidth=${pwd.any { it in '\uFF01'..'\uFF5E' }} csrf=$csrf mod=${pk.first.take(24)} exp=${pk.second} mm=${encPwd.take(24)}")
+            Log.e("EnShiSchedule", "LOGIN user=$username pwd_len=${pwd.length} csrf=$csrf")
 
             val form = FormBody.Builder()
                 .add("csrftoken", csrf)
@@ -108,20 +108,10 @@ class ZhengFangClient(baseUrl: String) {
                 .header("X-Requested-With", "XMLHttpRequest")
                 .build()
 
-            Log.e("EnShiSchedule", "COOKIES=${(client.cookieJar as SimpleCookieJar).describe()}")
-            Log.e("EnShiSchedule", "BODY csrftoken=$csrf yhm=$username mm=$encPwd")
-
             client.newCall(req).execute().use { resp ->
                 val body = resp.body?.string() ?: return LoginResult(false, "登录响应为空")
                 Log.e("EnShiSchedule", "LOGIN resp code=${resp.code} len=${body.length} url=${resp.request.url}")
-                Log.e("EnShiSchedule", "RESPCODE up=${body.contains("updatePassword")} idx=${body.contains("index_")} pwderr=${body.contains("用户名或密码不正确")}")
-                Log.e("EnShiSchedule", "RESPHEAD=" + body.take(900).replace("\n", " "))
-                body.lines().forEach { line ->
-                    val t = line.trim()
-                    if (t.contains("用户名") || t.contains("密码") || t.contains("验证码") || t.contains("错误")) {
-                        Log.e("EnShiSchedule", "RESP: " + t.take(120))
-                    }
-                }
+                Log.e("EnShiSchedule", "RESPCODE up=${body.contains("updatePassword")} idx=${body.contains("index_")} pwderr=${body.contains("用户名或密码不正确")} cookie=${(client.cookieJar as SimpleCookieJar).describe()}")
                 extractLoginError(body)?.let { return LoginResult(false, it) }
                 val stillOnLogin = body.contains("login_slogin.html") && !body.contains("index_")
                 if (stillOnLogin) {
@@ -186,20 +176,29 @@ class ZhengFangClient(baseUrl: String) {
     }
 }
 
-/** 简易内存 cookie 容器（每次登录重新建立会话） */
+/**
+ * 简易内存 cookie 容器
+ * --------------------------------------------------
+ * 关键修复：按 cookie 名【合并】保存，不能清空覆盖。
+ * 教务部署在 Tengine 负载均衡集群上，通过 route cookie 做会话路由粘滞：
+ * 登录 302 时服务器会下发新 JSESSIONID，若此时把旧的 route cookie 覆盖丢失，
+ * 后续请求会被路由到另一台后端，那边没有登录会话，导致一直返回纯净登录页（19376）。
+ * 同时丢弃 Max-Age=0 的过期/删除标记 cookie（如 rememberMe=deleteMe）。
+ */
 private class SimpleCookieJar : CookieJar {
-    private val store = HashMap<String, MutableList<Cookie>>()
+    private val store = HashMap<String, MutableMap<String, Cookie>>()
     override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-        store.getOrPut(url.host) { mutableListOf() }.apply {
-            clear()
-            addAll(cookies)
+        val m = store.getOrPut(url.host) { HashMap() }
+        for (c in cookies) {
+            if (c.expiresAt() < System.currentTimeMillis()) continue  // 丢弃过期/删除标记
+            m[c.name] = c
         }
     }
     override fun loadForRequest(url: HttpUrl): List<Cookie> =
-        store[url.host] ?: emptyList()
+        store[url.host]?.values?.filter { it.expiresAt() >= System.currentTimeMillis() } ?: emptyList()
 
     fun describe(): String {
         if (store.isEmpty()) return "EMPTY"
-        return store.entries.joinToString(";") { (h, cs) -> h + "=" + cs.joinToString(",") { c -> c.name + ":" + c.value.take(12) } }
+        return store.entries.joinToString(";") { (h, cs) -> h + "=" + cs.values.joinToString(",") { it.name + ":" + it.value.take(12) } }
     }
 }
