@@ -258,6 +258,7 @@ fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.()
 }
 
 /** 玻璃输入框 */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GlassTextField(
     value: String,
@@ -310,6 +311,7 @@ fun PrimaryButton(text: String, enabled: Boolean = true, modifier: Modifier = Mo
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginForm(
     baseUrl: String, onBaseUrl: (String) -> Unit,
@@ -366,6 +368,7 @@ fun LoginForm(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScheduleScreen(
     courses: List<Course>?,
