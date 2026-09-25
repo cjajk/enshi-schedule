@@ -7,17 +7,26 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Color.Companion.White
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.work.WorkManager
 import com.hbesxy.schedule.data.ScheduleRepository
 import com.hbesxy.schedule.model.Course
@@ -35,6 +44,11 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/** 校徽深蓝主色 */
+val EnShiBlue = Color(0xFF123A6B)
+val EnShiBlueLight = Color(0xFF3B6FD4)
+val EnShiBlueSoft = Color(0xFF9DB7E8)
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,7 +64,6 @@ fun ScheduleApp() {
     val scope = rememberCoroutineScope()
     val repo = remember { ScheduleRepository(context) }
 
-    // 通知权限
     if (Build.VERSION.SDK_INT >= 33) {
         val launcher = rememberLauncherForActivityResult(
             ActivityResultContracts.RequestPermission()
@@ -71,7 +84,6 @@ fun ScheduleApp() {
     var dailyOn by remember { mutableStateOf(false) }
     var lastFetched by remember { mutableStateOf("从未刷新") }
 
-    // 加载已保存配置
     LaunchedEffect(Unit) {
         val (b, x, t) = repo.getConfig()
         baseUrl = b
@@ -98,7 +110,6 @@ fun ScheduleApp() {
         busy = true
         status = "正在登录教务系统..."
         try {
-            // 网络请求、解析、落盘全部放到 IO 线程，避免 NetworkOnMainThreadException
             val (msg, snapshot) = withContext(Dispatchers.IO) {
                 val client = ZhengFangClient(baseUrl.ifBlank { repo.defaultBaseUrl })
                 val login = client.login(username, password)
@@ -149,22 +160,26 @@ fun ScheduleApp() {
         }
     }
 
-    MaterialTheme {
-        Scaffold(
-            topBar = {
-                TopAppBar(title = { Text("恩施学院课表") }, colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary
-                ))
-            }
-        ) { padding ->
+    // 苹果风：柔和蓝白渐变玻璃背景
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(Color(0xFFEAF1FF), Color(0xFFF8FBFF), Color(0xFFE8F0FF))
+                )
+            )
+    ) {
+        MaterialTheme {
             Column(
                 modifier = Modifier
-                    .padding(padding)
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp)
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 20.dp, bottom = 24.dp)
             ) {
+                HeaderBar()
+                Spacer(Modifier.height(20.dp))
                 if (!loggedIn) {
                     LoginForm(
                         baseUrl = baseUrl, onBaseUrl = { baseUrl = it },
@@ -197,6 +212,104 @@ fun ScheduleApp() {
     }
 }
 
+/** 顶部玻璃标题栏 */
+@Composable
+fun HeaderBar() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                Brush.horizontalGradient(
+                    listOf(EnShiBlueLight.copy(alpha = 0.75f), EnShiBlue.copy(alpha = 0.85f))
+                ),
+                RoundedCornerShape(24.dp)
+            )
+            .padding(vertical = 18.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                "恩施学院课表",
+                color = White,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 0.5.sp
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "正方教务系统 · 每日自动同步",
+                color = White.copy(alpha = 0.75f),
+                fontSize = 12.sp
+            )
+        }
+    }
+}
+
+/** 毛玻璃卡片 */
+@Composable
+fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = White.copy(alpha = 0.60f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(modifier = Modifier.padding(20.dp), content = content)
+    }
+}
+
+/** 玻璃输入框 */
+@Composable
+fun GlassTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String,
+    singleLine: Boolean = true,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    trailingIcon: (@Composable () -> Unit)? = null
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier,
+        label = { Text(label, fontSize = 13.sp) },
+        singleLine = singleLine,
+        shape = RoundedCornerShape(16.dp),
+        visualTransformation = visualTransformation,
+        trailingIcon = trailingIcon,
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = EnShiBlue.copy(alpha = 0.7f),
+            unfocusedBorderColor = Color.Transparent,
+            focusedContainerColor = White.copy(alpha = 0.55f),
+            unfocusedContainerColor = White.copy(alpha = 0.45f),
+            focusedLabelColor = EnShiBlue,
+            unfocusedLabelColor = Color(0xFF7C87A6),
+            cursorColor = EnShiBlue,
+            focusedTextColor = Color(0xFF1C2438),
+            unfocusedTextColor = Color(0xFF1C2438)
+        )
+    )
+}
+
+/** 主渐变按钮 */
+@Composable
+fun PrimaryButton(text: String, enabled: Boolean = true, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = EnShiBlue,
+            contentColor = White,
+            disabledContainerColor = EnShiBlue.copy(alpha = 0.4f)
+        ),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp)
+    ) {
+        Text(text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+    }
+}
+
 @Composable
 fun LoginForm(
     baseUrl: String, onBaseUrl: (String) -> Unit,
@@ -208,32 +321,49 @@ fun LoginForm(
     busy: Boolean,
     onLogin: () -> Unit
 ) {
-    Text("教务系统入口", style = MaterialTheme.typography.labelLarge)
-    OutlinedTextField(value = baseUrl, onValueChange = onBaseUrl, modifier = Modifier.fillMaxWidth(),
-        placeholder = { Text("http://jw.hbesxy.net") })
-    Spacer(Modifier.height(12.dp))
-    Text("学号", style = MaterialTheme.typography.labelLarge)
-    OutlinedTextField(value = username, onValueChange = onUsername, modifier = Modifier.fillMaxWidth())
-    Spacer(Modifier.height(12.dp))
-    Text("密码", style = MaterialTheme.typography.labelLarge)
-    OutlinedTextField(value = password, onValueChange = onPassword, modifier = Modifier.fillMaxWidth(),
-        visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-        trailingIcon = {
-            TextButton(onClick = onToggleShowPassword) { Text(if (showPassword) "隐藏" else "显示") }
-        })
-    Spacer(Modifier.height(12.dp))
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        OutlinedTextField(value = xnm, onValueChange = onXnm, modifier = Modifier.weight(1f),
-            label = { Text("学年(如2026)") })
-        OutlinedTextField(value = term, onValueChange = onTerm, modifier = Modifier.weight(1f),
-            label = { Text("学期(1/2/3)") })
+    GlassCard {
+        Text(
+            "登录教务系统",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFF1C2438)
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "输入正方教务账号密码，自动拉取最新课表",
+            fontSize = 12.sp,
+            color = Color(0xFF7C87A6)
+        )
+        Spacer(Modifier.height(20.dp))
+        GlassTextField(value = baseUrl, onValueChange = onBaseUrl, modifier = Modifier.fillMaxWidth(), label = "教务地址")
+        Spacer(Modifier.height(12.dp))
+        GlassTextField(value = username, onValueChange = onUsername, modifier = Modifier.fillMaxWidth(), label = "学号")
+        Spacer(Modifier.height(12.dp))
+        GlassTextField(
+            value = password, onValueChange = onPassword, modifier = Modifier.fillMaxWidth(), label = "密码",
+            visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = {
+                TextButton(onClick = onToggleShowPassword) {
+                    Text(if (showPassword) "隐藏" else "显示", color = EnShiBlue, fontSize = 13.sp)
+                }
+            }
+        )
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            GlassTextField(value = xnm, onValueChange = onXnm, modifier = Modifier.weight(1f), label = "学年(如2026)")
+            GlassTextField(value = term, onValueChange = onTerm, modifier = Modifier.weight(1f), label = "学期(1/2/3)")
+        }
+        Spacer(Modifier.height(20.dp))
+        PrimaryButton(text = if (busy) "处理中..." else "登录并拉取课表", enabled = !busy, modifier = Modifier.fillMaxWidth()) { onLogin() }
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "账密仅保存在本机 · 学期 1=秋季 / 2=春季 / 3=短学期",
+            fontSize = 11.sp,
+            color = Color(0xFF7C87A6),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
-    Spacer(Modifier.height(16.dp))
-    Button(onClick = onLogin, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-        Text(if (busy) "处理中..." else "登录并拉取课表")
-    }
-    Text("说明：账密仅保存在本机。学期 1=秋季 / 2=春季 / 3=短学期。",
-        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
@@ -249,28 +379,37 @@ fun ScheduleScreen(
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            Text("上次刷新：$lastFetched", style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = onRefresh, enabled = !busy, modifier = Modifier.weight(1f)) {
-                    Text(if (busy) "刷新中..." else "立即刷新课表")
-                }
-                OutlinedButton(onClick = { showLogoutDialog = true }) {
-                    Text("退出登录", color = MaterialTheme.colorScheme.error)
-                }
+    GlassCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("上次刷新", fontSize = 12.sp, color = Color(0xFF7C87A6))
+                Spacer(Modifier.height(2.dp))
+                Text(lastFetched, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color(0xFF1C2438))
             }
-            Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("每日自动刷新", modifier = Modifier.weight(1f))
-                Switch(checked = dailyOn, onCheckedChange = onToggleDaily)
+                Text("每日自动刷新", fontSize = 13.sp, color = Color(0xFF1C2438))
+                Spacer(Modifier.width(4.dp))
+                Switch(
+                    checked = dailyOn, onCheckedChange = onToggleDaily,
+                    colors = SwitchDefaults.colors(checkedTrackColor = EnShiBlueLight)
+                )
             }
-            if (status.isNotBlank()) {
-                Spacer(Modifier.height(8.dp))
-                Text(status, style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary)
+        }
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            PrimaryButton(text = if (busy) "刷新中..." else "立即刷新课表", enabled = !busy, modifier = Modifier.weight(1f)) { onRefresh() }
+            OutlinedButton(
+                onClick = { showLogoutDialog = true },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(16.dp),
+                colors = OutlinedButtonDefaults.colors(contentColor = EnShiBlue)
+            ) {
+                Text("退出登录", fontWeight = FontWeight.Medium)
             }
+        }
+        if (status.isNotBlank()) {
+            Spacer(Modifier.height(12.dp))
+            Text(status, fontSize = 12.sp, color = if (status.startsWith("刷新失败") || status.contains("不正确")) Color(0xFFD3545C) else EnShiBlueLight)
         }
     }
 
@@ -280,7 +419,7 @@ fun ScheduleScreen(
             title = { Text("退出登录") },
             text = { Text("将清除本机保存的账号、密码与课表数据，确定退出？") },
             confirmButton = {
-                TextButton(onClick = { showLogoutDialog = false; onLogout() }) { Text("确定") }
+                TextButton(onClick = { showLogoutDialog = false; onLogout() }) { Text("确定", color = EnShiBlue) }
             },
             dismissButton = {
                 TextButton(onClick = { showLogoutDialog = false }) { Text("取消") }
@@ -291,29 +430,61 @@ fun ScheduleScreen(
     Spacer(Modifier.height(16.dp))
     val list = courses
     if (list == null) {
-        Text("尚未拉取课表，请点击「立即刷新课表」。",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        GlassCard {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                Text("尚未拉取课表", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color(0xFF1C2438))
+                Spacer(Modifier.height(6.dp))
+                Text("点击「立即刷新课表」获取最新安排", fontSize = 12.sp, color = Color(0xFF7C87A6))
+            }
+        }
         return
     }
-    Text("共 ${list.size} 门课程", style = MaterialTheme.typography.titleMedium)
-    Spacer(Modifier.height(8.dp))
+    Text(
+        "共 ${list.size} 门课程",
+        fontSize = 14.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = Color(0xFF1C2438),
+        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+    )
     val sorted = list.sortedWith(compareBy<Course> { it.day }.thenBy { it.sections.firstOrNull() ?: 0 })
     val dayNames = listOf("", "周一", "周二", "周三", "周四", "周五", "周六", "周日")
     for (c in sorted) {
-        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-            Column(Modifier.padding(12.dp)) {
-                Text(c.name, style = MaterialTheme.typography.titleSmall)
-                Text(
-                    "${dayNames[c.day]}｜第 ${c.sections.joinToString("、")} 节｜第 ${c.weeks.joinToString("、")} 周",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+        GlassCard(modifier = Modifier.padding(bottom = 10.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .padding(top = 5.dp)
+                        .background(EnShiBlueLight, CircleShape)
                 )
-                Text(
-                    "${c.position.ifBlank { "地点待定" }}｜${c.teacher}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(c.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1C2438))
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            dayNames[c.day],
+                            fontSize = 11.sp,
+                            color = EnShiBlueLight,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier
+                                .background(EnShiBlueLight.copy(alpha = 0.14f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "第 ${c.sections.joinToString("、")} 节 ｜ 第 ${c.weeks.joinToString("、")} 周",
+                        fontSize = 12.sp,
+                        color = Color(0xFF5A6680)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "${c.position.ifBlank { "地点待定" }}  ·  ${c.teacher}",
+                        fontSize = 12.sp,
+                        color = Color(0xFF7C87A6)
+                    )
+                }
             }
         }
     }
