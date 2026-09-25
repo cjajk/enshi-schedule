@@ -200,6 +200,6 @@ private class SimpleCookieJar : CookieJar {
 
     fun describe(): String {
         if (store.isEmpty()) return "EMPTY"
-        return store.entries.joinToString(";") { (h, cs) -> h + "=" + cs.joinToString(",") { it.name() + ":" + it.value().take(12) } }
+        return store.entries.joinToString(";") { (h, cs) -> h + "=" + cs.joinToString(",") { c -> c.name + ":" + c.value.take(12) } }
     }
 }
