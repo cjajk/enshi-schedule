@@ -12,15 +12,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import com.hbesxy.schedule.model.Course
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Locale
 import kotlin.math.abs
 
 /**
  * 一周课程可视化网格
  * --------------------------------------------------
- * 横轴：周一~周日；纵轴：第 1 节 ~ 最大节次。
+ * 横轴：周一~周日（表头带日期，今天列高亮）；
+ * 纵轴：第 1 节 ~ 最大节次（左侧节次号 + 起止时间）。
  * 每门课按（星期几 × 起始节次）定位，卡片高度 = 占用节次数 × 单格高，
- * 同一格多门课（冲突/合班）自动左右分栏，今天所在列高亮。
+ * 同一格多门课（冲突/合班）自动左右分栏。
+ * 卡片文字可换行显示，课程名优先完整呈现，地点/教师小字跟随。
  */
 private val coursePalette = listOf(
     Color(0xFFD9E6FF), // 淡蓝
@@ -39,15 +43,33 @@ internal fun courseColor(name: String): Color {
 }
 
 private val dayNames = listOf("一", "二", "三", "四", "五", "六", "日")
-private val cellH: Dp = 56.dp
-private val headerH: Dp = 34.dp
-private val labelW: Dp = 24.dp
+private val cellH: Dp = 54.dp
+private val headerH: Dp = 46.dp
+private val labelW: Dp = 34.dp
+
+/** 标准节次起止时间（参考教务系统作息） */
+private val sectionTimes = mapOf(
+    1 to ("08:00" to "08:45"),
+    2 to ("08:55" to "09:40"),
+    3 to ("10:00" to "10:45"),
+    4 to ("10:55" to "11:40"),
+    5 to ("14:00" to "14:45"),
+    6 to ("14:55" to "15:40"),
+    7 to ("16:00" to "16:45"),
+    8 to ("16:55" to "17:40"),
+    9 to ("19:00" to "19:45"),
+    10 to ("19:55" to "20:40")
+)
 
 @Composable
 fun WeeklyScheduleGrid(courses: List<Course>, modifier: Modifier = Modifier) {
     if (courses.isEmpty()) return
     val maxSection = courses.maxOf { c -> c.sections.maxOrNull() ?: 1 }
-    val today = (Calendar.getInstance().get(Calendar.DAY_OF_WEEK) + 5) % 7 + 1 // 1=周一 .. 7=周日
+    // 今天：1=周一 .. 7=周日；本周一日期
+    val cal = Calendar.getInstance()
+    val today = (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7 + 1
+    val monday = (cal.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -(today - 1)) }
+    val df = SimpleDateFormat("M/d", Locale.getDefault())
 
     // 每门课 → 格子区间
     data class Block(val course: Course, val start: Int, val end: Int, val col: Int)
@@ -62,31 +84,46 @@ fun WeeklyScheduleGrid(courses: List<Course>, modifier: Modifier = Modifier) {
 
         // ===== 背景层：表头 + 节次行条带 =====
         Column(Modifier.fillMaxWidth()) {
-            // 表头：节次标签位 + 7 个星期列
+            // 表头：节次标签位 + 7 个星期列（周X + 日期）
             Row(Modifier.height(headerH), verticalAlignment = Alignment.CenterVertically) {
                 Spacer(Modifier.width(labelW))
                 for (d in 1..7) {
+                    val date = (monday.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, d - 1) }.time
                     Box(
                         Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            .background(if (d == today) EnShiBlueLight.copy(alpha = 0.16f) else Color.Transparent),
+                            .background(if (d == today) EnShiBlueLight.copy(alpha = 0.18f) else Color.Transparent),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            "周" + dayNames[d - 1],
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (d == today) EnShiBlue else Color(0xFF4A5568)
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "周" + dayNames[d - 1],
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (d == today) EnShiBlue else Color(0xFF4A5568)
+                            )
+                            Text(
+                                df.format(date),
+                                fontSize = 9.sp,
+                                color = if (d == today) EnShiBlueLight else Color(0xFF8A93A6)
+                            )
+                        }
                     }
                 }
             }
-            // 节次行：左侧节次号 + 7 格交替底色
+            // 节次行：左侧节次号 + 起止时间 + 7 格交替底色
             for (s in 1..maxSection) {
                 Row(Modifier.height(cellH)) {
-                    Box(Modifier.width(labelW), contentAlignment = Alignment.Center) {
-                        Text("$s", fontSize = 10.sp, color = Color(0xFF8A93A6))
+                    Box(Modifier.width(labelW).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("$s", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF4A5568))
+                            val t = sectionTimes[s]
+                            if (t != null) {
+                                Text(t.first, fontSize = 7.5.sp, color = Color(0xFF8A93A6), lineHeight = 8.sp)
+                                Text(t.second, fontSize = 7.5.sp, color = Color(0xFF8A93A6), lineHeight = 8.sp)
+                            }
+                        }
                     }
                     for (d in 1..7) {
                         val isToday = d == today
@@ -106,7 +143,7 @@ fun WeeklyScheduleGrid(courses: List<Course>, modifier: Modifier = Modifier) {
             }
         }
 
-        // ===== 前景层：课程卡片（绝对定位） =====
+        // ===== 前景层：课程卡片（绝对定位，文字可换行不截断） =====
         blocks.forEach { b ->
             // 冲突处理：同一天同一起始节次的多门课，按课程名排序后左右分栏
             val sameSlot = blocks.filter { it.course.day == b.col && it.start == b.start }
@@ -119,31 +156,40 @@ fun WeeklyScheduleGrid(courses: List<Course>, modifier: Modifier = Modifier) {
             val height = (b.end - b.start + 1) * cellH - 3.dp
             val left = labelW + (b.col - 1) * colW + xOffset
 
+            val span = b.end - b.start + 1
             Box(
                 Modifier
                     .offset(x = left, y = top)
                     .width(slotW - 3.dp)
                     .height(height)
                     .background(courseColor(b.course.name), RoundedCornerShape(10.dp))
-                    .padding(horizontal = 5.dp, vertical = 4.dp)
+                    .padding(horizontal = 4.dp, vertical = 3.dp)
             ) {
                 Column {
                     Text(
                         b.course.name,
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
-                        maxLines = if (b.end - b.start + 1 >= 3) 2 else 1,
+                        maxLines = if (span >= 2) 2 else 3,
                         overflow = TextOverflow.Ellipsis,
+                        lineHeight = 13.sp,
                         color = Color(0xFF1C2438)
                     )
-                    if (b.end - b.start + 1 >= 3) {
-                        Spacer(Modifier.height(2.dp))
+                    if (span >= 2) {
+                        Spacer(Modifier.height(1.dp))
                         Text(
                             b.course.position.ifBlank { "地点待定" },
-                            fontSize = 8.sp,
+                            fontSize = 8.5.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            color = Color(0xFF5A6680)
+                            color = Color(0xFF4A5568)
+                        )
+                        Text(
+                            b.course.teacher,
+                            fontSize = 8.5.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = Color(0xFF6B7688)
                         )
                     }
                 }
