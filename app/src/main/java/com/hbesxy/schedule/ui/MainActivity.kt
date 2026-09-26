@@ -22,29 +22,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Color.Companion.White
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.work.WorkManager
-import com.hbesxy.schedule.data.ScheduleRepository
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hbesxy.schedule.model.Course
-import com.hbesxy.schedule.model.ScheduleSnapshot
-import com.hbesxy.schedule.model.TermMap
-import com.hbesxy.schedule.net.ZhengFangClient
 import com.hbesxy.schedule.notify.ChangeNotifier
-import com.hbesxy.schedule.parser.ScheduleParser
-import com.hbesxy.schedule.worker.ScheduleRefreshWorker
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 /** 校徽深蓝主色 */
 val EnShiBlue = Color(0xFF123A6B)
 val EnShiBlueLight = Color(0xFF3B6FD4)
@@ -58,100 +45,15 @@ class MainActivity : ComponentActivity() {
 }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ScheduleApp() {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val repo = remember { ScheduleRepository(context) }
+fun ScheduleApp(viewModel: ScheduleViewModel = viewModel()) {
     if (Build.VERSION.SDK_INT >= 33) {
         val launcher = rememberLauncherForActivityResult(
             ActivityResultContracts.RequestPermission()
         ) {}
         LaunchedEffect(Unit) { launcher.launch(Manifest.permission.POST_NOTIFICATIONS) }
     }
-    var baseUrl by remember { mutableStateOf("") }
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var showPassword by remember { mutableStateOf(false) }
-    var xnm by remember { mutableStateOf("") }
-    var term by remember { mutableStateOf("1") }
-    var loggedIn by remember { mutableStateOf(false) }
-    var courses by remember { mutableStateOf<List<Course>?>(null) }
-    var status by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
-    var dailyOn by remember { mutableStateOf(false) }
-    var lastFetched by remember { mutableStateOf("从未刷新") }
-    LaunchedEffect(Unit) {
-        val (b, x, t) = repo.getConfig()
-        baseUrl = b
-        xnm = x
-        term = t
-        val cred = repo.getCredentials()
-        if (cred != null) {
-            username = cred.first
-            password = cred.second
-            loggedIn = true
-        }
-        val at = repo.getLastFetchedAt()
-        if (at > 0) lastFetched = formatTime(at)
-        courses = repo.getSavedCourses()
-        dailyOn = withContext(Dispatchers.IO) {
-            try {
-                WorkManager.getInstance(context).getWorkInfosByTag("daily_schedule_refresh").get()
-                    .any { !it.state.isFinished }
-            } catch (e: Exception) { false }
-        }
-    }
-    suspend fun doRefresh() {
-        busy = true
-        status = "正在登录教务系统..."
-        try {
-            val (msg, snapshot) = withContext(Dispatchers.IO) {
-                val client = ZhengFangClient(baseUrl.ifBlank { repo.defaultBaseUrl })
-                val login = client.login(username, password)
-                if (!login.ok) return@withContext login.message to null as ScheduleSnapshot?
-                val raw = client.fetchSchedule(xnm, TermMap.toCode(term))
-                if (raw == null) return@withContext "未获取到课表数据，请检查学年学期" to null as ScheduleSnapshot?
-                val arr = JSONArray()
-                raw.kbList.forEach { arr.put(it) }
-                val parsed = ScheduleParser.parseKbList(arr)
-                val snapshot = ScheduleSnapshot(raw.xnm, raw.xqm, parsed, System.currentTimeMillis())
-                val changed = repo.saveSnapshot(snapshot)
-                val m = if (changed) "课表有变动，已更新" else "课表已更新（无变动）"
-                m to snapshot
-            }
-            if (snapshot != null) {
-                courses = snapshot.courses
-                lastFetched = formatTime(snapshot.fetchedAt)
-            }
-            status = msg
-        } catch (e: Exception) {
-            status = "刷新失败：" + (e.message ?: e.javaClass.simpleName)
-        } finally {
-            busy = false
-        }
-    }
-    fun saveAndSchedule() {
-        scope.launch {
-            repo.saveCredentials(username, password)
-            repo.saveConfig(baseUrl.ifBlank { repo.defaultBaseUrl }, xnm, term)
-            loggedIn = true
-            status = "已保存，正在首次刷新..."
-            doRefresh()
-        }
-    }
-    fun logout() {
-        scope.launch {
-            repo.clearAll()
-            username = ""
-            password = ""
-            xnm = ""
-            term = "1"
-            loggedIn = false
-            courses = null
-            status = ""
-            lastFetched = "从未刷新"
-        }
-    }
+    // 所有状态现在只有一个来源：ViewModel。感知生命周期，Activity 后台时自动停止收集。
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
     // 简约苹果风：柔和蓝白渐变背景（浅、通透、不刺眼）
     Box(
         modifier = Modifier
@@ -171,7 +73,7 @@ fun ScheduleApp() {
             ) {
                 HeaderBar()
                 Spacer(Modifier.height(20.dp))
-                if (!loggedIn) {
+                if (!state.loggedIn) {
                     // 登录态：内容区独立滚动（单层滚动，避免嵌套导致测量崩溃）
                     Column(
                         modifier = Modifier
@@ -180,32 +82,28 @@ fun ScheduleApp() {
                             .verticalScroll(rememberScrollState())
                     ) {
                         LoginForm(
-                            baseUrl = baseUrl, onBaseUrl = { baseUrl = it },
-                            username = username, onUsername = { username = it },
-                            password = password, onPassword = { password = it },
-                            showPassword = showPassword, onToggleShowPassword = { showPassword = !showPassword },
-                            xnm = xnm, onXnm = { xnm = it },
-                            term = term, onTerm = { term = it },
-                            busy = busy,
-                            onLogin = { saveAndSchedule() }
+                            baseUrl = state.baseUrl, onBaseUrl = viewModel::onBaseUrlChange,
+                            username = state.username, onUsername = viewModel::onUsernameChange,
+                            password = state.password, onPassword = viewModel::onPasswordChange,
+                            showPassword = state.showPassword, onToggleShowPassword = viewModel::onToggleShowPassword,
+                            xnm = state.xnm, onXnm = viewModel::onXnmChange,
+                            term = state.term, onTerm = viewModel::onTermChange,
+                            busy = state.busy,
+                            onLogin = viewModel::login
                         )
                     }
                 } else {
                     ScheduleScreen(
                         modifier = Modifier.weight(1f),
-                        courses = courses,
-                        username = username,
-                        status = status,
-                        lastFetched = lastFetched,
-                        dailyOn = dailyOn,
-                        busy = busy,
-                        onRefresh = { scope.launch { doRefresh() } },
-                        onToggleDaily = { on ->
-                            dailyOn = on
-                            if (on) ScheduleRefreshWorker.scheduleDaily(context)
-                            else WorkManager.getInstance(context).cancelAllWorkByTag("daily_schedule_refresh")
-                        },
-                        onLogout = { logout() }
+                        courses = state.courses,
+                        username = state.username,
+                        status = state.status,
+                        lastFetched = state.lastFetched,
+                        dailyOn = state.dailyOn,
+                        busy = state.busy,
+                        onRefresh = viewModel::refresh,
+                        onToggleDaily = viewModel::toggleDaily,
+                        onLogout = viewModel::logout
                     )
                 }
             }
@@ -470,7 +368,10 @@ fun ScheduleHome(
         }
         return
     }
-    val sorted = list.sortedWith(compareBy<Course> { it.day }.thenBy { it.sections.firstOrNull() ?: 0 })
+    // 优化点：用 remember(list) 缓存排序结果，避免每次重组都重新排序同一份数据
+    val sorted = remember(list) {
+        list.sortedWith(compareBy<Course> { it.day }.thenBy { it.sections.firstOrNull() ?: 0 })
+    }
     val dayNames = listOf("", "周一", "周二", "周三", "周四", "周五", "周六", "周日")
     // 视图切换：周视图（网格）/ 列表视图
     var viewMode by remember { mutableStateOf("week") }
@@ -675,5 +576,3 @@ fun ProfilePage(
         )
     }
 }
-private fun formatTime(ms: Long): String =
-    SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(ms))
