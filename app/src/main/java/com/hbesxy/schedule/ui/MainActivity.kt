@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -17,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Color.Companion.White
@@ -184,6 +186,7 @@ fun ScheduleApp() {
                 } else {
                     ScheduleScreen(
                         courses = courses,
+                        username = username,
                         status = status,
                         lastFetched = lastFetched,
                         dailyOn = dailyOn,
@@ -353,10 +356,11 @@ fun LoginForm(
         )
     }
 }
-@OptIn(ExperimentalMaterial3Api::class)
+/** 登录后主界面：底部导航（课表 / 我的），退出登录在“我的”里 */
 @Composable
 fun ScheduleScreen(
     courses: List<Course>?,
+    username: String,
     status: String,
     lastFetched: String,
     dailyOn: Boolean,
@@ -365,7 +369,67 @@ fun ScheduleScreen(
     onToggleDaily: (Boolean) -> Unit,
     onLogout: () -> Unit
 ) {
-    var showLogoutDialog by remember { mutableStateOf(false) }
+    var tab by remember { mutableStateOf(0) }
+    Column(Modifier.fillMaxWidth()) {
+        // 内容区
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 8.dp)
+        ) {
+            if (tab == 0) {
+                ScheduleHome(courses = courses, status = status, lastFetched = lastFetched, busy = busy, onRefresh = onRefresh)
+            } else {
+                ProfilePage(username = username, lastFetched = lastFetched, dailyOn = dailyOn, onToggleDaily = onToggleDaily, onLogout = onLogout)
+            }
+        }
+        // 底部导航（课表 / 我的）
+        BottomNavBar(tab = tab, onTab = { tab = it })
+    }
+}
+/** 底部导航栏：简约玻璃质感，最右为“我的” */
+@Composable
+fun BottomNavBar(tab: Int, onTab: (Int) -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+            .background(White.copy(alpha = 0.92f))
+            .padding(horizontal = 20.dp, vertical = 8.dp)
+    ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("课表", "我的").forEachIndexed { i, name ->
+                val selected = tab == i
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (selected) EnShiBlueLight.copy(alpha = 0.16f) else Color.Transparent)
+                        .clickable { onTab(i) }
+                        .padding(vertical = 10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        name,
+                        fontSize = 14.sp,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                        color = if (selected) EnShiBlue else Color(0xFF5A6680)
+                    )
+                }
+            }
+        }
+    }
+}
+/** 课表页：刷新卡片 + 周视图/列表切换 + 课程明细 */
+@Composable
+fun ScheduleHome(
+    courses: List<Course>?,
+    status: String,
+    lastFetched: String,
+    busy: Boolean,
+    onRefresh: () -> Unit
+) {
     GlassCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -373,49 +437,16 @@ fun ScheduleScreen(
                 Spacer(Modifier.height(2.dp))
                 Text(lastFetched, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color(0xFF1C2438))
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("每日自动刷新", fontSize = 13.sp, color = Color(0xFF1C2438))
-                Spacer(Modifier.width(4.dp))
-                Switch(
-                    checked = dailyOn, onCheckedChange = onToggleDaily,
-                    colors = SwitchDefaults.colors(checkedTrackColor = EnShiBlueLight)
-                )
-            }
-        }
-        Spacer(Modifier.height(16.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            PrimaryButton(text = if (busy) "刷新中..." else "立即刷新课表", enabled = !busy, modifier = Modifier.weight(1f)) { onRefresh() }
-            Button(
-                onClick = { showLogoutDialog = true },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(1.dp, EnShiBlue.copy(alpha = 0.25f)),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.White.copy(alpha = 0.6f),
-                    contentColor = EnShiBlue
-                )
-            ) {
-                Text("退出登录", fontWeight = FontWeight.Medium)
-            }
+            PrimaryButton(text = if (busy) "刷新中..." else "立即刷新", enabled = !busy) { onRefresh() }
         }
         if (status.isNotBlank()) {
-            Spacer(Modifier.height(12.dp))
-            Text(status, fontSize = 12.sp,
-                color = if (status.startsWith("刷新失败") || status.contains("不正确")) Color(0xFFD3545C) else EnShiBlueLight)
+            Spacer(Modifier.height(10.dp))
+            Text(
+                status,
+                fontSize = 12.sp,
+                color = if (status.startsWith("刷新失败") || status.contains("不正确")) Color(0xFFD3545C) else EnShiBlueLight
+            )
         }
-    }
-    if (showLogoutDialog) {
-        AlertDialog(
-            onDismissRequest = { showLogoutDialog = false },
-            title = { Text("退出登录") },
-            text = { Text("将清除本机保存的账号、密码与课表数据，确定退出？") },
-            confirmButton = {
-                TextButton(onClick = { showLogoutDialog = false; onLogout() }) { Text("确定", color = EnShiBlue) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLogoutDialog = false }) { Text("取消") }
-            }
-        )
     }
     Spacer(Modifier.height(16.dp))
     val list = courses
@@ -424,7 +455,7 @@ fun ScheduleScreen(
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                 Text("尚未拉取课表", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color(0xFF1C2438))
                 Spacer(Modifier.height(6.dp))
-                Text("点击「立即刷新课表」获取最新安排", fontSize = 12.sp, color = Color(0xFF5A6680))
+                Text("点击「立即刷新」获取最新安排", fontSize = 12.sp, color = Color(0xFF5A6680))
             }
         }
         return
@@ -509,7 +540,7 @@ fun ScheduleScreen(
             }
         }
     } else {
-        // ===== 原列表视图 =====
+        // ===== 列表视图 =====
         for (c in sorted) {
             GlassCard(modifier = Modifier.padding(bottom = 10.dp)) {
                 Row(verticalAlignment = Alignment.Top) {
@@ -550,6 +581,88 @@ fun ScheduleScreen(
                 }
             }
         }
+    }
+}
+/** 我的页：账号信息 + 每日自动刷新 + 退出登录 */
+@Composable
+fun ProfilePage(
+    username: String,
+    lastFetched: String,
+    dailyOn: Boolean,
+    onToggleDaily: (Boolean) -> Unit,
+    onLogout: () -> Unit
+) {
+    var showLogoutDialog by remember { mutableStateOf(false) }
+    // 账号卡片
+    GlassCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    .background(EnShiBlueLight.copy(alpha = 0.16f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("恩", color = EnShiBlue, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            }
+            Spacer(Modifier.width(14.dp))
+            Column {
+                Text("恩施学院课表", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1C2438))
+                Spacer(Modifier.height(2.dp))
+                Text("学号 $username", fontSize = 12.sp, color = Color(0xFF5A6680))
+            }
+        }
+    }
+    Spacer(Modifier.height(14.dp))
+    // 每日自动刷新
+    GlassCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("每日自动刷新", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color(0xFF1C2438))
+                Spacer(Modifier.height(2.dp))
+                Text("每天自动同步教务系统，调课第一时间提醒", fontSize = 11.sp, color = Color(0xFF5A6680))
+            }
+            Switch(
+                checked = dailyOn, onCheckedChange = onToggleDaily,
+                colors = SwitchDefaults.colors(checkedTrackColor = EnShiBlueLight)
+            )
+        }
+    }
+    Spacer(Modifier.height(14.dp))
+    // 上次刷新
+    GlassCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("上次刷新", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color(0xFF1C2438))
+                Spacer(Modifier.height(2.dp))
+                Text(lastFetched, fontSize = 12.sp, color = Color(0xFF5A6680))
+            }
+        }
+    }
+    Spacer(Modifier.height(20.dp))
+    // 退出登录
+    Button(
+        onClick = { showLogoutDialog = true },
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = Color(0xFFFDE8E8),
+            contentColor = Color(0xFFD3545C)
+        )
+    ) {
+        Text("退出登录", fontWeight = FontWeight.Medium)
+    }
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = { Text("退出登录") },
+            text = { Text("将清除本机保存的账号、密码与课表数据，确定退出？") },
+            confirmButton = {
+                TextButton(onClick = { showLogoutDialog = false; onLogout() }) { Text("确定", color = EnShiBlue) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) { Text("取消") }
+            }
+        )
     }
 }
 private fun formatTime(ms: Long): String =
