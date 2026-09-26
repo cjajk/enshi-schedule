@@ -166,25 +166,33 @@ fun ScheduleApp() {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp)
                     .padding(top = 20.dp, bottom = 24.dp)
             ) {
                 HeaderBar()
                 Spacer(Modifier.height(20.dp))
                 if (!loggedIn) {
-                    LoginForm(
-                        baseUrl = baseUrl, onBaseUrl = { baseUrl = it },
-                        username = username, onUsername = { username = it },
-                        password = password, onPassword = { password = it },
-                        showPassword = showPassword, onToggleShowPassword = { showPassword = !showPassword },
-                        xnm = xnm, onXnm = { xnm = it },
-                        term = term, onTerm = { term = it },
-                        busy = busy,
-                        onLogin = { saveAndSchedule() }
-                    )
+                    // 登录态：内容区独立滚动（单层滚动，避免嵌套导致测量崩溃）
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        LoginForm(
+                            baseUrl = baseUrl, onBaseUrl = { baseUrl = it },
+                            username = username, onUsername = { username = it },
+                            password = password, onPassword = { password = it },
+                            showPassword = showPassword, onToggleShowPassword = { showPassword = !showPassword },
+                            xnm = xnm, onXnm = { xnm = it },
+                            term = term, onTerm = { term = it },
+                            busy = busy,
+                            onLogin = { saveAndSchedule() }
+                        )
+                    }
                 } else {
                     ScheduleScreen(
+                        modifier = Modifier.weight(1f),
                         courses = courses,
                         username = username,
                         status = status,
@@ -359,6 +367,7 @@ fun LoginForm(
 /** 登录后主界面：底部导航（课表 / 我的），退出登录在“我的”里 */
 @Composable
 fun ScheduleScreen(
+    modifier: Modifier = Modifier,
     courses: List<Course>?,
     username: String,
     status: String,
@@ -370,10 +379,11 @@ fun ScheduleScreen(
     onLogout: () -> Unit
 ) {
     var tab by remember { mutableStateOf(0) }
-    Column(Modifier.fillMaxWidth()) {
-        // 内容区
+    Column(modifier.fillMaxWidth().fillMaxHeight()) {
+        // 内容区：独占剩余高度，自身滚动（单层滚动，底部导航固定）
         Column(
             modifier = Modifier
+                .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(bottom = 8.dp)
