@@ -1,196 +1,147 @@
 package com.hbesxy.schedule.ui
-
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.*
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.hbesxy.schedule.model.Course
-import java.text.SimpleDateFormat
 import java.util.Calendar
-import java.util.Locale
-import kotlin.math.abs
-
 /**
- * 一周课程可视化网格
- * --------------------------------------------------
- * 横轴：周一~周日（表头带日期，今天列高亮）；
- * 纵轴：第 1 节 ~ 最大节次（左侧节次号 + 起止时间）。
- * 每门课按（星期几 × 起始节次）定位，卡片高度 = 占用节次数 × 单格高，
- * 同一格多门课（冲突/合班）自动左右分栏。
- * 卡片文字可换行显示，课程名优先完整呈现，地点/教师小字跟随。
+ * 周课表网格：截图里之前的问题是 7 天 + 时间列硬塞进屏幕宽度，
+ * 每格只有二三十 dp，课程名全被截断成"马..."、".."。
+ * 这版把每天的列宽固定为一个合理宽度（可完整显示 4~5 个汉字换行），
+ * 整个表格允许横向滚动，同时给星期栏加了"今天"高亮，观感上更接近
+ * 市面上课程表 App（比如 Sleepy·轻课表）的网格样式。
  */
-private val coursePalette = listOf(
-    Color(0xFFD9E6FF), // 淡蓝
-    Color(0xFFDDF2E3), // 淡绿
-    Color(0xFFFFE8D6), // 淡橙
-    Color(0xFFE8E2FF), // 淡紫
-    Color(0xFFFFE3EC), // 淡粉
-    Color(0xFFD8F3F5), // 淡青
-    Color(0xFFFFF3D6)  // 淡黄
-)
-
-internal fun courseColor(name: String): Color {
-    var h = 0
-    for (ch in name) h = h * 31 + ch.code
-    return coursePalette[abs(h) % coursePalette.size]
-}
-
-private val dayNames = listOf("一", "二", "三", "四", "五", "六", "日")
-private val cellH: Dp = 54.dp
-private val headerH: Dp = 46.dp
-private val labelW: Dp = 34.dp
-
-/** 标准节次起止时间（参考教务系统作息） */
-private val sectionTimes = mapOf(
-    1 to ("08:00" to "08:45"),
-    2 to ("08:55" to "09:40"),
-    3 to ("10:00" to "10:45"),
-    4 to ("10:55" to "11:40"),
-    5 to ("14:00" to "14:45"),
-    6 to ("14:55" to "15:40"),
-    7 to ("16:00" to "16:45"),
-    8 to ("16:55" to "17:40"),
-    9 to ("19:00" to "19:45"),
-    10 to ("19:55" to "20:40")
-)
-
 @Composable
-fun WeeklyScheduleGrid(courses: List<Course>, modifier: Modifier = Modifier) {
-    if (courses.isEmpty()) return
-    val maxSection = courses.maxOf { c -> c.sections.maxOrNull() ?: 1 }
-    // 今天：1=周一 .. 7=周日；本周一日期
-    val cal = Calendar.getInstance()
-    val today = (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7 + 1
-    val monday = (cal.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -(today - 1)) }
-    val df = SimpleDateFormat("M/d", Locale.getDefault())
-
-    // 每门课 → 格子区间
-    data class Block(val course: Course, val start: Int, val end: Int, val col: Int)
-    val blocks = courses.map { c ->
-        val s = c.sections.minOrNull() ?: 1
-        val e = c.sections.maxOrNull() ?: s
-        Block(c, s, e, c.day)
+fun WeeklyScheduleGrid(courses: List<Course>) {
+    val maxSection = (courses.flatMap { it.sections }.maxOrNull() ?: 10).coerceAtLeast(10)
+    val slotHeight = 52.dp
+    val dayColumnWidth = 92.dp
+    val timeColumnWidth = 36.dp
+    val scrollState = rememberScrollState()
+    val dayNames = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
+    // 1(周一)..7(周日)，方便和 Course.day 对齐
+    val todayIndex = remember {
+        val dow = Calendar.getInstance().get(Calendar.DAY_OF_WEEK) // 1=周日 ... 7=周六
+        if (dow == Calendar.SUNDAY) 7 else dow - 1
     }
-
-    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        val colW = if (maxWidth > labelW) (maxWidth - labelW) / 7f else 44.dp
-
-        // ===== 背景层：表头 + 节次行条带 =====
-        Column(Modifier.fillMaxWidth()) {
-            // 表头：节次标签位 + 7 个星期列（周X + 日期）
-            Row(Modifier.height(headerH), verticalAlignment = Alignment.CenterVertically) {
-                Spacer(Modifier.width(labelW))
-                for (d in 1..7) {
-                    val date = (monday.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, d - 1) }.time
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .background(if (d == today) EnShiBlueLight.copy(alpha = 0.18f) else Color.Transparent),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                "周" + dayNames[d - 1],
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (d == today) EnShiBlue else Color(0xFF4A5568)
-                            )
-                            Text(
-                                df.format(date),
-                                fontSize = 9.sp,
-                                color = if (d == today) EnShiBlueLight else Color(0xFF8A93A6)
-                            )
-                        }
-                    }
-                }
-            }
-            // 节次行：左侧节次号 + 起止时间 + 7 格交替底色
-            for (s in 1..maxSection) {
-                Row(Modifier.height(cellH)) {
-                    Box(Modifier.width(labelW).fillMaxHeight(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("$s", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF4A5568))
-                            val t = sectionTimes[s]
-                            if (t != null) {
-                                Text(t.first, fontSize = 7.5.sp, color = Color(0xFF8A93A6), lineHeight = 8.sp)
-                                Text(t.second, fontSize = 7.5.sp, color = Color(0xFF8A93A6), lineHeight = 8.sp)
-                            }
-                        }
-                    }
-                    for (d in 1..7) {
-                        val isToday = d == today
-                        val bg = when {
-                            isToday -> EnShiBlueLight.copy(alpha = 0.08f)
-                            (s + d) % 2 == 0 -> Color(0xFFF2F6FD)
-                            else -> Color(0xFFFFFFFF)
-                        }
-                        Box(
-                            Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .background(bg)
-                        )
-                    }
+    val palette = listOf(
+        Color(0xFFFFE3C2), Color(0xFFFFD3DC), Color(0xFFD8E8FF),
+        Color(0xFFDFF5E1), Color(0xFFEBDBFF), Color(0xFFFFF3C4), Color(0xFFCFEAE6)
+    )
+    fun colorFor(name: String): Color = palette[(name.hashCode() and Int.MAX_VALUE) % palette.size]
+    val coursesByDay = remember(courses) { courses.groupBy { it.day } }
+    Column {
+        // ---- 星期表头（与下方网格共用同一个横向滚动状态，保持对齐）----
+        Row(Modifier.horizontalScroll(scrollState)) {
+            Spacer(Modifier.width(timeColumnWidth))
+            for (d in 1..7) {
+                val isToday = d == todayIndex
+                Box(
+                    modifier = Modifier
+                        .width(dayColumnWidth)
+                        .padding(vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        dayNames[d - 1],
+                        fontSize = 12.sp,
+                        fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isToday) EnShiBlue else Color(0xFF5A6680)
+                    )
                 }
             }
         }
-
-        // ===== 前景层：课程卡片（绝对定位，文字可换行不截断） =====
-        blocks.forEach { b ->
-            // 冲突处理：同一天同一起始节次的多门课，按课程名排序后左右分栏
-            val sameSlot = blocks.filter { it.course.day == b.col && it.start == b.start }
-            val idx = sameSlot.sortedBy { it.course.name }.indexOf(b)
-            val slotCount = sameSlot.size
-            val slotW = if (slotCount > 1) colW / slotCount else colW
-            val xOffset = if (slotCount > 1) idx * slotW else 0.dp
-
-            val top = headerH + (b.start - 1) * cellH
-            val height = (b.end - b.start + 1) * cellH - 3.dp
-            val left = labelW + (b.col - 1) * colW + xOffset
-
-            val span = b.end - b.start + 1
-            Box(
-                Modifier
-                    .offset(x = left, y = top)
-                    .width(slotW - 3.dp)
-                    .height(height)
-                    .background(courseColor(b.course.name), RoundedCornerShape(10.dp))
-                    .padding(horizontal = 4.dp, vertical = 3.dp)
-            ) {
-                Column {
-                    Text(
-                        b.course.name,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = if (span >= 2) 2 else 3,
-                        overflow = TextOverflow.Ellipsis,
-                        lineHeight = 13.sp,
-                        color = Color(0xFF1C2438)
-                    )
-                    if (span >= 2) {
-                        Spacer(Modifier.height(1.dp))
+        Spacer(Modifier.height(4.dp))
+        Row {
+            // ---- 节次列：固定不滚动 ----
+            Column(Modifier.width(timeColumnWidth)) {
+                for (s in 1..maxSection) {
+                    Box(
+                        modifier = Modifier.height(slotHeight),
+                        contentAlignment = Alignment.TopCenter
+                    ) {
                         Text(
-                            b.course.position.ifBlank { "地点待定" },
-                            fontSize = 8.5.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = Color(0xFF4A5568)
+                            "$s",
+                            fontSize = 11.sp,
+                            color = Color(0xFF9AA5BD),
+                            modifier = Modifier.padding(top = 4.dp)
                         )
-                        Text(
-                            b.course.teacher,
-                            fontSize = 8.5.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = Color(0xFF6B7688)
-                        )
+                    }
+                }
+            }
+            // ---- 7 天课程列：横向滚动，避免被挤扁 ----
+            Row(Modifier.horizontalScroll(scrollState)) {
+                for (d in 1..7) {
+                    val isToday = d == todayIndex
+                    Box(
+                        modifier = Modifier
+                            .width(dayColumnWidth)
+                            .height(slotHeight * maxSection)
+                            .background(if (isToday) EnShiBlueLight.copy(alpha = 0.06f) else Color.Transparent)
+                    ) {
+                        // 节次分隔线
+                        Column(Modifier.fillMaxSize()) {
+                            repeat(maxSection) {
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .height(slotHeight)
+                                        .border(border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFFEDF1F9)))
+                                )
+                            }
+                        }
+                        // 课程色块，按起始节次定位、按跨度决定高度
+                        for (c in coursesByDay[d].orEmpty()) {
+                            val start = c.sections.minOrNull() ?: continue
+                            val end = c.sections.maxOrNull() ?: start
+                            val span = (end - start + 1).coerceAtLeast(1)
+                            Box(
+                                modifier = Modifier
+                                    .padding(horizontal = 3.dp, vertical = 2.dp)
+                                    .offset(y = slotHeight * (start - 1))
+                                    .width(dayColumnWidth - 6.dp)
+                                    .height(slotHeight * span - 4.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(colorFor(c.name))
+                                    .padding(6.dp)
+                            ) {
+                                Column {
+                                    Text(
+                                        c.name,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFF1C2438),
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        lineHeight = 13.sp
+                                    )
+                                    if (c.position.isNotBlank()) {
+                                        Spacer(Modifier.height(2.dp))
+                                        Text(
+                                            c.position,
+                                            fontSize = 9.sp,
+                                            color = Color(0xFF5A6680),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
