@@ -13,10 +13,6 @@ import org.json.JSONObject
 
 private val Context.dataStore by preferencesDataStore(name = "schedule_prefs")
 
-/**
- * 本地数据仓库（DataStore）
- * 保存：登录凭证、教务入口、学年学期、最近一次课表快照
- */
 class ScheduleRepository(private val context: Context) {
 
     private object Keys {
@@ -67,28 +63,14 @@ class ScheduleRepository(private val context: Context) {
         )
     }
 
-    /** 保存快照，返回是否相对上次有变动 */
     suspend fun saveSnapshot(snapshot: ScheduleSnapshot): Boolean {
         val p = context.dataStore.data.first()
         val old = p[Keys.SNAPSHOT_JSON]
-        val oldFp = old?.let { computeFingerprint(it) }
-        val newFp = snapshot.fingerprint()
-        val changed = oldFp != null && oldFp != newFp
-
-        val json = JSONArray()
-        for (c in snapshot.courses) {
-            json.put(JSONObject().apply {
-                put("name", c.name)
-                put("teacher", c.teacher)
-                put("position", c.position)
-                put("day", c.day)
-                put("weeks", JSONArray(c.weeks))
-                put("sections", JSONArray(c.sections))
-            })
-        }
-        context.dataStore.edit { p ->
-            p[Keys.SNAPSHOT_JSON] = json.toString()
-            p[Keys.FETCHED_AT] = snapshot.fetchedAt
+        val json = serializeCourses(snapshot.courses)
+        val changed = old != null && old != json
+        context.dataStore.edit { prefs ->
+            prefs[Keys.SNAPSHOT_JSON] = json
+            prefs[Keys.FETCHED_AT] = snapshot.fetchedAt
         }
         return changed
     }
@@ -98,44 +80,45 @@ class ScheduleRepository(private val context: Context) {
         return p[Keys.FETCHED_AT] ?: 0L
     }
 
-    /** 读取最近一次保存的课表（供打开 App 时直接展示） */
     suspend fun getSavedCourses(): List<Course>? {
         val p = context.dataStore.data.first()
         val json = p[Keys.SNAPSHOT_JSON] ?: return null
         return try {
             val arr = JSONArray(json)
-            (0 until arr.length()).map { arr.getJSONObject(it) }.map {
+            (0 until arr.length()).map { idx ->
+                val obj = arr.getJSONObject(idx)
                 Course(
-                    name = it.optString("name"),
-                    teacher = it.optString("teacher"),
-                    position = it.optString("position"),
-                    day = it.optInt("day"),
-                    weeks = it.optJSONArray("weeks").let { w -> (0 until w.length()).map { w.getInt(it) } },
-                    sections = it.optJSONArray("sections").let { s -> (0 until s.length()).map { s.getInt(it) } }
+                    name = obj.optString("name"),
+                    teacher = obj.optString("teacher"),
+                    position = obj.optString("position"),
+                    day = obj.optInt("day"),
+                    weeks = obj.optJSONArray("weeks")?.let { w ->
+                        (0 until w.length()).map { w.getInt(it) }
+                    } ?: emptyList(),
+                    sections = obj.optJSONArray("sections")?.let { s ->
+                        (0 until s.length()).map { s.getInt(it) }
+                    } ?: emptyList()
                 )
             }
         } catch (e: Exception) { null }
     }
 
-    /** 退出登录：清空全部本地数据（账密、配置、课表快照） */
     suspend fun clearAll() {
         context.dataStore.edit { it.clear() }
     }
 
-    private fun computeFingerprint(json: String): String {
-        return try {
-            val arr = JSONArray(json)
-            val list = (0 until arr.length()).map { arr.getJSONObject(it) }
-            list.map {
-                listOf(
-                    it.optString("name"),
-                    it.optString("teacher"),
-                    it.optString("position"),
-                    it.optInt("day"),
-                    it.optJSONArray("weeks").toString(),
-                    it.optJSONArray("sections").toString()
-                ).joinToString("|")
-            }.sorted().joinToString("\n")
-        } catch (e: Exception) { json }
+    private fun serializeCourses(courses: List<Course>): String {
+        val json = JSONArray()
+        for (c in courses) {
+            json.put(JSONObject().apply {
+                put("name", c.name)
+                put("teacher", c.teacher)
+                put("position", c.position)
+                put("day", c.day)
+                put("weeks", JSONArray(c.weeks))
+                put("sections", JSONArray(c.sections))
+            })
+        }
+        return json.toString()
     }
 }
