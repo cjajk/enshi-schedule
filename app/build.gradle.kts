@@ -55,3 +55,17 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
+
+// 应用图标：仓库内保存 base64 文本，构建时解码生成 WebP（GitHub 文件接口不支持推送二进制）
+tasks.register("generateIconWebp") {
+    val src = file("icon_launcher_b64.txt")
+    val out = file("src/main/res/drawable/ic_launcher_logo.webp")
+    outputs.file(out)
+    doLast {
+        out.parentFile.mkdirs()
+        out.writeBytes(java.util.Base64.getDecoder().decode(src.readText().trim()))
+    }
+}
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn("generateIconWebp")
+}
