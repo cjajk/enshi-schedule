@@ -1,8 +1,10 @@
 package com.hbesxy.schedule.worker
 
 import android.content.Context
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -25,23 +27,18 @@ class ScheduleRefreshWorker(
         val credentials = repo.getCredentials() ?: return Result.failure()
         val (baseUrl, xnm, term) = repo.getConfig()
         if (xnm.isBlank()) return Result.failure()
-
         val client = ZhengFangClient(baseUrl)
         val login = client.login(credentials.first, credentials.second)
         if (!login.ok) {
-            // 明确的身份/验证码类错误 -> 永久失败（提醒用户），网络类 -> 稍后重试
             val authError = login.message.contains("密码") || login.message.contains("账号") || login.message.contains("验证码")
             return if (authError) Result.failure() else Result.retry()
         }
-
         val raw = client.fetchSchedule(xnm, TermMap.toCode(term)) ?: return Result.retry()
         val arr = JSONArray()
         raw.kbList.forEach { arr.put(it) }
         val courses = ScheduleParser.parseKbList(arr)
-
         val snapshot = ScheduleSnapshot(xnm, TermMap.toCode(term), courses, System.currentTimeMillis())
         val changed = repo.saveSnapshot(snapshot)
-
         if (changed) {
             ChangeNotifier.notifyChange(
                 applicationContext,
@@ -55,8 +52,13 @@ class ScheduleRefreshWorker(
         private const val UNIQUE_NAME = "daily_schedule_refresh"
 
         fun scheduleDaily(context: Context) {
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .setRequiresBatteryNotLow(true)
+                .build()
             val request = PeriodicWorkRequestBuilder<ScheduleRefreshWorker>(1, TimeUnit.DAYS)
                 .addTag(UNIQUE_NAME)
+                .setConstraints(constraints)
                 .build()
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 UNIQUE_NAME,
