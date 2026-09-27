@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -63,7 +65,7 @@ tasks.register("generateIconWebp") {
     outputs.file(out)
     doLast {
         out.parentFile.mkdirs()
-        out.writeBytes(java.util.Base64.getDecoder().decode(src.readText().trim()))
+        out.writeBytes(Base64.getDecoder().decode(src.readText().trim()))
     }
 }
 tasks.matching { it.name == "preBuild" }.configureEach {
