@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -19,8 +20,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -29,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.hbesxy.schedule.R
 import com.hbesxy.schedule.model.Course
 import com.hbesxy.schedule.notify.ChangeNotifier
 
@@ -40,6 +42,7 @@ val AccentLight = Color(0xFF4A7FD9)
 val Surface = Color(0xFFFFFFFF)
 val Background = Color(0xFFF5F6FA)
 val Divider = Color(0xFFEFF1F5)
+val InputBorder = Color(0xFFD5DAE3)
 val ErrorRed = Color(0xFFE5484D)
 val SuccessGreen = Color(0xFF30A46C)
 
@@ -118,15 +121,13 @@ fun ScheduleApp(viewModel: ScheduleViewModel = viewModel()) {
 @Composable
 fun AppLogo() {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
+        Image(
+            painter = painterResource(R.drawable.ic_launcher_logo),
+            contentDescription = "校徽",
             modifier = Modifier
-                .size(64.dp)
+                .size(72.dp)
                 .clip(CircleShape)
-                .background(Accent),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("恩", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 26.sp)
-        }
+        )
         Spacer(Modifier.height(14.dp))
         Text("恩施学院课表", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Ink)
         Spacer(Modifier.height(4.dp))
@@ -171,7 +172,7 @@ fun CleanTextField(
         trailingIcon = trailingIcon,
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = Accent,
-            unfocusedBorderColor = Divider,
+            unfocusedBorderColor = InputBorder,
             focusedContainerColor = Surface,
             unfocusedContainerColor = Surface,
             focusedLabelColor = Accent,
