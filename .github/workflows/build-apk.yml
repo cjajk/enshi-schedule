@@ -1,11 +1,9 @@
 name: Build APK
 
-# 云端自动构建 APK（无需本地 Android SDK）
-# 把本 android-app 目录作为 GitHub 仓库根推送后，此工作流自动编译并产出可下载 APK。
 on:
-  workflow_dispatch:          # 手动触发
+  workflow_dispatch:
   push:
-    branches: [main, master]  # 推送到 main/master 自动触发
+    branches: [main, master]
 
 jobs:
   build:
@@ -38,12 +36,24 @@ jobs:
         run: |
           gradle assembleDebug --no-daemon
         env:
-          # 每次构建自动递增版本号：versionCode 用运行序号，versionName 同步
           VERSION_CODE: ${{ github.run_number }}
           VERSION_NAME: 1.0.${{ github.run_number }}
 
-      - name: Upload APK artifact
+      - name: Build Release APK
+        run: |
+          gradle assembleRelease --no-daemon
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: 1.0.${{ github.run_number }}
+
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: enshi-schedule-apk
+          name: enshi-schedule-debug-apk
           path: app/build/outputs/apk/debug/*.apk
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: enshi-schedule-release-apk
+          path: app/build/outputs/apk/release/*.apk
