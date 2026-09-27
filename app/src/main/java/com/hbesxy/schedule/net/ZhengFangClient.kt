@@ -12,17 +12,10 @@ import okhttp3.Request
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-/**
- * 正方教务系统客户端（jwglxt / zftal-ui-v5）
- * --------------------------------------------------
- * 实现流程：获取登录页(拿 csrftoken) -> 获取 RSA 公钥 -> 加密密码登录 -> 维持 cookie -> 拉课表
- * 教务入口：http://jw.hbesxy.net/jwglxt/
- */
 class ZhengFangClient(baseUrl: String) {
 
     private val jwglxt = normalizeBaseUrl(baseUrl) + "/jwglxt"
 
-    /** 规范化教务入口：去所有空白字符、补全 scheme、非法回退官方地址 */
     private fun normalizeBaseUrl(raw: String): String {
         var s = raw.trim().replace(Regex("\\s+"), "")
         if (s.isEmpty()) s = "http://jw.hbesxy.net"
@@ -37,7 +30,6 @@ class ZhengFangClient(baseUrl: String) {
         .followRedirects(true)
         .build()
 
-    /** 1. 获取登录页并解析出 csrftoken */
     private fun fetchCsrfToken(): String? {
         val req = Request.Builder().url("$jwglxt/xtgl/login_slogin.html").build()
         client.newCall(req).execute().use { resp ->
@@ -59,7 +51,6 @@ class ZhengFangClient(baseUrl: String) {
         return null
     }
 
-    /** 2. 获取 RSA 公钥 (modulus, exponent) */
     private fun fetchPublicKey(): Pair<String, String>? {
         val req = Request.Builder().url("$jwglxt/xtgl/login_getPublicKey.html").build()
         client.newCall(req).execute().use { resp ->
@@ -72,20 +63,18 @@ class ZhengFangClient(baseUrl: String) {
         return null
     }
 
-    /** 全角标点转半角（教务系统密码只认半角，全角感叹号/括号等会导致密码错误） */
     private fun normalizePassword(s: String): String {
         val sb = StringBuilder(s.length)
         for (c in s) {
             when {
-                c == '\u3000' -> sb.append(' ')          // 全角空格
-                c in '\uFF01'..'\uFF5E' -> sb.append((c - 0xFEE0).toChar())  // 全角标点/字母数字 → 半角
+                c == '\u3000' -> sb.append(' ')
+                c in '\uFF01'..'\uFF5E' -> sb.append((c - 0xFEE0).toChar())
                 else -> sb.append(c)
             }
         }
         return sb.toString()
     }
 
-    /** 登录；成功后 client 已持有会话 cookie */
     fun login(username: String, password: String): LoginResult {
         try {
             val pwd = normalizePassword(password)
@@ -94,27 +83,20 @@ class ZhengFangClient(baseUrl: String) {
             val pk = fetchPublicKey()
                 ?: return LoginResult(false, "无法获取 RSA 加密公钥")
             val encPwd = RsaUtil.encryptPassword(pwd, pk.first, pk.second)
-            Log.e("EnShiSchedule", "LOGIN user=$username pwd_len=${pwd.length} csrf=$csrf")
-
+            if (DEBUG) Log.d(TAG, "login user=$username pwd_len=${pwd.length}")
             val form = FormBody.Builder()
                 .add("csrftoken", csrf)
                 .add("yhm", username)
                 .add("mm", encPwd)
                 .build()
-
             val req = Request.Builder()
                 .url("$jwglxt/xtgl/login_slogin.html")
                 .post(form)
                 .header("X-Requested-With", "XMLHttpRequest")
                 .build()
-
             client.newCall(req).execute().use { resp ->
                 val body = resp.body?.string() ?: return LoginResult(false, "登录响应为空")
-                Log.e("EnShiSchedule", "LOGIN resp code=${resp.code} len=${body.length} url=${resp.request.url}")
-                val hasUp = body.contains("updatePassword")
-                val hasIdx = body.contains("index_")
-                val hasPwdErr = body.contains("用户名或密码不正确")
-                Log.e("EnShiSchedule", "RESPCODE up=$hasUp idx=$hasIdx pwderr=$hasPwdErr cookie=${(client.cookieJar as SimpleCookieJar).describe()}")
+                if (DEBUG) Log.d(TAG, "login resp code=${resp.code} len=${body.length}")
                 extractLoginError(body)?.let { return LoginResult(false, it) }
                 val stillOnLogin = body.contains("login_slogin.html") && !body.contains("index_")
                 if (stillOnLogin) {
@@ -123,12 +105,11 @@ class ZhengFangClient(baseUrl: String) {
                 return LoginResult(true, "登录成功")
             }
         } catch (e: Exception) {
-            Log.e("EnShiSchedule", "登录异常", e)
+            Log.e(TAG, "登录异常", e)
             return LoginResult(false, "登录异常：" + (e.message ?: e.javaClass.simpleName))
         }
     }
 
-    /** 从登录响应中识别明确的错误关键字 */
     private fun extractLoginError(body: String): String? {
         val markers = listOf(
             "用户名或密码不正确" to "账号或密码错误",
@@ -141,7 +122,6 @@ class ZhengFangClient(baseUrl: String) {
         return null
     }
 
-    /** 拉取课表原始数据（需先登录） */
     fun fetchSchedule(xnm: String, xqm: String): ScheduleRaw? {
         val form = FormBody.Builder()
             .add("xnm", xnm)
@@ -149,7 +129,6 @@ class ZhengFangClient(baseUrl: String) {
             .add("kzlx", "ck")
             .add("xsdm", "")
             .build()
-
         val candidates = listOf(
             "$jwglxt/kbcx/xskbcx_cxXsgrkb.html?gnmkdm=N2151",
             "$jwglxt/kbcx/xsxskbcx_cxXsxsb.html?gnmkdm=N2151"
@@ -173,35 +152,28 @@ class ZhengFangClient(baseUrl: String) {
                         }
                     }
                 }
-            } catch (e: Exception) { /* 尝试下一个候选接口 */ }
+            } catch (e: Exception) { }
         }
         return null
     }
+
+    companion object {
+        private const val TAG = "EnShiSchedule"
+        private const val DEBUG = false
+    }
 }
 
-/**
- * 简易内存 cookie 容器
- * --------------------------------------------------
- * 关键修复：按 cookie 名【合并】保存，不能清空覆盖。
- * 教务部署在 Tengine 负载均衡集群上，通过 route cookie 做会话路由粘滞：
- * 登录 302 时服务器会下发新 JSESSIONID，若此时把旧的 route cookie 覆盖丢失，
- * 后续请求会被路由到另一台后端，那边没有登录会话，导致一直返回纯净登录页（19376）。
- * 同时丢弃 Max-Age=0 的过期/删除标记 cookie（如 rememberMe=deleteMe）。
- */
 private class SimpleCookieJar : CookieJar {
     private val store = HashMap<String, MutableMap<String, Cookie>>()
+
     override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
         val m = store.getOrPut(url.host) { HashMap() }
         for (c in cookies) {
-            if (c.expiresAt < System.currentTimeMillis()) continue  // 丢弃过期/删除标记
+            if (c.expiresAt < System.currentTimeMillis()) continue
             m[c.name] = c
         }
     }
+
     override fun loadForRequest(url: HttpUrl): List<Cookie> =
         store[url.host]?.values?.filter { it.expiresAt >= System.currentTimeMillis() } ?: emptyList()
-
-    fun describe(): String {
-        if (store.isEmpty()) return "EMPTY"
-        return store.entries.joinToString(";") { (h, cs) -> h + "=" + cs.values.joinToString(",") { it.name + ":" + it.value.take(12) } }
-    }
 }
