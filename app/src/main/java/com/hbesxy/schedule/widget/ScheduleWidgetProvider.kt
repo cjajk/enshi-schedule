@@ -55,16 +55,23 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
         )
         views.setOnClickPendingIntent(R.id.widget_root, open)
 
-        // 标题日期（今天）
+        // 标题日期（今天）+ 当前教学周
         val now = Calendar.getInstance()
         val todayIndex =
             if (now.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) 7 else now.get(Calendar.DAY_OF_WEEK) - 1
+        val currentWeek = runBlocking(Dispatchers.IO) {
+            try {
+                ScheduleRepository(context).getCurrentWeek()
+            } catch (e: Exception) {
+                1
+            }
+        }
         views.setTextViewText(
             R.id.widget_date,
-            SimpleDateFormat("M月d日 EEE", Locale.CHINA).format(Date())
+            SimpleDateFormat("M月d日 EEE", Locale.CHINA).format(Date()) + " · 第${currentWeek}周"
         )
 
-        // 本地已保存课表 → 今天课程
+        // 本地已保存课表 → 今天的课程（只显示当前教学周）
         val saved = runBlocking(Dispatchers.IO) {
             try {
                 ScheduleRepository(context).getSavedCourses()
@@ -72,7 +79,8 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
                 null
             }
         }
-        val todayCourses = saved?.filter { it.day == todayIndex }
+        val todayCourses = saved
+            ?.filter { it.day == todayIndex && (it.weeks.isEmpty() || it.weeks.contains(currentWeek)) }
             ?.sortedBy { it.sections.minOrNull() ?: 0 }
             ?: emptyList()
 

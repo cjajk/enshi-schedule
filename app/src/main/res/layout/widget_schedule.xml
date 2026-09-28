@@ -39,11 +39,13 @@
             android:textSize="11sp" />
     </LinearLayout>
 
-    <View
+    <TextView
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:layout_marginTop="8dp"
-        android:background="@drawable/widget_divider" />
+        android:background="@drawable/widget_divider"
+        android:maxLines="1"
+        android:text="" />
 
     <!-- 空状态 -->
     <TextView

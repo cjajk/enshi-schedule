@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <shortcut
+        android:shortcutId="refresh"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher_logo"
+        android:shortcutShortLabel="@string/shortcut_refresh"
+        android:shortcutLongLabel="@string/shortcut_refresh_long">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:targetPackage="com.hbesxy.schedule"
+            android:targetClass="com.hbesxy.schedule.ui.MainActivity">
+            <extra
+                android:name="shortcut_action"
+                android:value="refresh" />
+        </intent>
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="widget_guide"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher_logo"
+        android:shortcutShortLabel="@string/shortcut_widget"
+        android:shortcutLongLabel="@string/shortcut_widget_long">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:targetPackage="com.hbesxy.schedule"
+            android:targetClass="com.hbesxy.schedule.ui.MainActivity">
+            <extra
+                android:name="shortcut_action"
+                android:value="widget_guide" />
+        </intent>
+    </shortcut>
+
+</shortcuts>

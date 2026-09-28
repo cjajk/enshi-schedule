@@ -2,6 +2,7 @@ package com.hbesxy.schedule.data
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -23,6 +24,7 @@ class ScheduleRepository(private val context: Context) {
         val TERM = stringPreferencesKey("term")
         val SNAPSHOT_JSON = stringPreferencesKey("snapshot_json")
         val FETCHED_AT = longPreferencesKey("fetched_at")
+        val CURRENT_WEEK = intPreferencesKey("current_week")
     }
 
     val defaultBaseUrl = "http://jw.hbesxy.net"
@@ -78,6 +80,18 @@ class ScheduleRepository(private val context: Context) {
     suspend fun getLastFetchedAt(): Long {
         val p = context.dataStore.data.first()
         return p[Keys.FETCHED_AT] ?: 0L
+    }
+
+    /** 当前教学周（用于过滤周课表/今日概览/小组件），默认第 1 周 */
+    suspend fun getCurrentWeek(): Int {
+        val p = context.dataStore.data.first()
+        return (p[Keys.CURRENT_WEEK] ?: 1).coerceIn(1, 30)
+    }
+
+    suspend fun saveCurrentWeek(week: Int) {
+        context.dataStore.edit { p ->
+            p[Keys.CURRENT_WEEK] = week.coerceIn(1, 30)
+        }
     }
 
     suspend fun getSavedCourses(): List<Course>? {

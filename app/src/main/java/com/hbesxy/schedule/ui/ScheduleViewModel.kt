@@ -34,6 +34,7 @@ data class ScheduleUiState(
     val xnm: String = "",
     val term: String = "1",
     val loggedIn: Boolean = false,
+    val currentWeek: Int = 1,
     val courses: List<Course>? = null,
     val status: String = "",
     val busy: Boolean = false,
@@ -60,6 +61,7 @@ class ScheduleViewModel(application: Application) : AndroidViewModel(application
             val cred = repo.getCredentials()
             val at = repo.getLastFetchedAt()
             val savedCourses = repo.getSavedCourses()
+            val week = repo.getCurrentWeek()
             val dailyOn = withContext(Dispatchers.IO) {
                 try {
                     WorkManager.getInstance(getApplication())
@@ -77,6 +79,7 @@ class ScheduleViewModel(application: Application) : AndroidViewModel(application
                     username = cred?.first ?: current.username,
                     password = cred?.second ?: current.password,
                     loggedIn = cred != null,
+                    currentWeek = week,
                     lastFetched = if (at > 0) formatTime(at) else current.lastFetched,
                     courses = savedCourses,
                     dailyOn = dailyOn
@@ -91,6 +94,14 @@ class ScheduleViewModel(application: Application) : AndroidViewModel(application
     fun onToggleShowPassword() = _uiState.update { it.copy(showPassword = !it.showPassword) }
     fun onXnmChange(v: String) = _uiState.update { it.copy(xnm = v) }
     fun onTermChange(v: String) = _uiState.update { it.copy(term = v.filter { c -> c.isDigit() }) }
+    /** 当前教学周（1~30），用于过滤周课表/今日概览/小组件 */
+    fun onCurrentWeekChange(v: String) {
+        val week = v.filter { c -> c.isDigit() }.take(2).toIntOrNull()?.coerceIn(1, 30)
+        if (week != null) {
+            _uiState.update { it.copy(currentWeek = week) }
+            viewModelScope.launch { repo.saveCurrentWeek(week) }
+        }
+    }
     /** 登录并首次拉取课表 */
     fun login() {
         val state = _uiState.value

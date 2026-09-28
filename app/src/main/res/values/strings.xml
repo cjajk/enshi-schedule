@@ -2,4 +2,8 @@
     <string name="app_name">恩施学院课表</string>
     <string name="widget_title">今日课表</string>
     <string name="widget_desc">在桌面查看今天的课程安排，随课表刷新自动更新</string>
+    <string name="shortcut_refresh">刷新课表</string>
+    <string name="shortcut_refresh_long">立即刷新今日课表</string>
+    <string name="shortcut_widget">添加小组件</string>
+    <string name="shortcut_widget_long">查看桌面小组件添加方法</string>
 </resources>

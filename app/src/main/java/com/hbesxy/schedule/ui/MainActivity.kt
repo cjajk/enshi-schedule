@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,13 +61,21 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ChangeNotifier.ensureChannel(this)
-        setContent { ScheduleApp() }
+        val shortcutAction = intent?.getStringExtra(EXTRA_SHORTCUT)
+        setContent { ScheduleApp(shortcutAction = shortcutAction) }
+    }
+
+    companion object {
+        const val EXTRA_SHORTCUT = "shortcut_action"
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ScheduleApp(viewModel: ScheduleViewModel = viewModel()) {
+fun ScheduleApp(
+    viewModel: ScheduleViewModel = viewModel(),
+    shortcutAction: String? = null
+) {
     if (Build.VERSION.SDK_INT >= 33) {
         val launcher = rememberLauncherForActivityResult(
             ActivityResultContracts.RequestPermission()
@@ -74,6 +83,19 @@ fun ScheduleApp(viewModel: ScheduleViewModel = viewModel()) {
         LaunchedEffect(Unit) { launcher.launch(Manifest.permission.POST_NOTIFICATIONS) }
     }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    // 长按 App 图标快捷方式：refresh=立即刷新，widget_guide=跳到「我的」页看小组件引导
+    var tab by rememberSaveable { mutableStateOf(0) }
+    var shortcutHandled by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(shortcutAction) {
+        if (shortcutAction != null && !shortcutHandled) {
+            shortcutHandled = true
+            when (shortcutAction) {
+                "refresh" -> viewModel.refresh()
+                "widget_guide" -> tab = 1
+            }
+        }
+    }
 
     // 细腻的浅蓝白渐变背景：底部略深、顶部通透，比纯色更有层次
     Box(
@@ -122,12 +144,16 @@ fun ScheduleApp(viewModel: ScheduleViewModel = viewModel()) {
                     } else {
                         ScheduleScreen(
                             modifier = Modifier.weight(1f),
+                            tab = tab,
+                            onTab = { tab = it },
                             courses = state.courses,
                             username = state.username,
                             status = state.status,
                             lastFetched = state.lastFetched,
+                            currentWeek = state.currentWeek,
                             dailyOn = state.dailyOn,
                             busy = state.busy,
+                            onCurrentWeekChange = viewModel::onCurrentWeekChange,
                             onRefresh = viewModel::refresh,
                             onToggleDaily = viewModel::toggleDaily,
                             onLogout = viewModel::logout
@@ -284,17 +310,20 @@ fun LoginForm(
 @Composable
 fun ScheduleScreen(
     modifier: Modifier = Modifier,
+    tab: Int,
+    onTab: (Int) -> Unit,
     courses: List<Course>?,
     username: String,
     status: String,
     lastFetched: String,
+    currentWeek: Int,
     dailyOn: Boolean,
     busy: Boolean,
+    onCurrentWeekChange: (String) -> Unit,
     onRefresh: () -> Unit,
     onToggleDaily: (Boolean) -> Unit,
     onLogout: () -> Unit
 ) {
-    var tab by remember { mutableStateOf(0) }
     Column(modifier.fillMaxWidth().fillMaxHeight()) {
         // 渐变品牌头：深蓝 → 亮蓝，白字标题 + 日期/学号
         Box(
@@ -333,12 +362,12 @@ fun ScheduleScreen(
                 .padding(bottom = 8.dp)
         ) {
             if (tab == 0) {
-                ScheduleHome(courses = courses, status = status, lastFetched = lastFetched, busy = busy, onRefresh = onRefresh)
+                ScheduleHome(courses = courses, status = status, lastFetched = lastFetched, currentWeek = currentWeek, busy = busy, onRefresh = onRefresh)
             } else {
-                ProfilePage(username = username, lastFetched = lastFetched, dailyOn = dailyOn, onToggleDaily = onToggleDaily, onLogout = onLogout)
+                ProfilePage(username = username, lastFetched = lastFetched, dailyOn = dailyOn, currentWeek = currentWeek, onCurrentWeekChange = onCurrentWeekChange, onToggleDaily = onToggleDaily, onLogout = onLogout)
             }
         }
-        BottomNavBar(tab = tab, onTab = { tab = it })
+        BottomNavBar(tab = tab, onTab = onTab)
     }
 }
 
@@ -394,13 +423,19 @@ fun ScheduleHome(
     courses: List<Course>?,
     status: String,
     lastFetched: String,
+    currentWeek: Int,
     busy: Boolean,
     onRefresh: () -> Unit
 ) {
-    // ---- 今日概览卡：今天几节课、下一节是什么 -------
-    val list = courses
-    if (list != null) {
-        TodayOverviewCard(list)
+    // ---- 按当前教学周过滤：只显示本周要上的课 ----
+    val allCourses = courses
+    val weekCourses = remember(allCourses, currentWeek) {
+        allCourses?.filter { it.weeks.isEmpty() || it.weeks.contains(currentWeek) }
+    }
+
+    // ---- 今日概览卡：今天几节课、下一节是什么（只算本周） -------
+    if (weekCourses != null) {
+        TodayOverviewCard(weekCourses)
         Spacer(Modifier.height(14.dp))
     }
 
@@ -425,7 +460,7 @@ fun ScheduleHome(
     }
     Spacer(Modifier.height(16.dp))
 
-    if (list == null) {
+    if (weekCourses == null) {
         CleanCard {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -446,6 +481,7 @@ fun ScheduleHome(
         return
     }
 
+    val list = weekCourses
     val sorted = remember(list) {
         list.sortedWith(compareBy<Course> { it.day }.thenBy { it.sections.firstOrNull() ?: 0 })
     }
@@ -457,7 +493,7 @@ fun ScheduleHome(
         modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
     ) {
         Text(
-            "共 ${list.size} 门课程",
+            "本周 ${list.size} 门课程 · 第${currentWeek}周",
             fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Ink,
             modifier = Modifier.weight(1f)
         )
@@ -617,6 +653,8 @@ fun ProfilePage(
     username: String,
     lastFetched: String,
     dailyOn: Boolean,
+    currentWeek: Int,
+    onCurrentWeekChange: (String) -> Unit,
     onToggleDaily: (Boolean) -> Unit,
     onLogout: () -> Unit
 ) {
@@ -637,6 +675,23 @@ fun ProfilePage(
                 Spacer(Modifier.height(2.dp))
                 Text("学号 $username", fontSize = 12.sp, color = InkSecondary)
             }
+        }
+    }
+    Spacer(Modifier.height(12.dp))
+
+    CleanCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("当前教学周", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Ink)
+                Spacer(Modifier.height(2.dp))
+                Text("周课表与小组件只显示本周课程，调课后记得更新", fontSize = 11.sp, color = InkTertiary)
+            }
+            CleanTextField(
+                value = currentWeek.toString(),
+                onValueChange = onCurrentWeekChange,
+                modifier = Modifier.width(72.dp),
+                label = "第几周"
+            )
         }
     }
     Spacer(Modifier.height(12.dp))
