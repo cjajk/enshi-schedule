@@ -7,6 +7,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,11 +17,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -33,6 +39,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hbesxy.schedule.R
 import com.hbesxy.schedule.model.Course
 import com.hbesxy.schedule.notify.ChangeNotifier
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 val Ink = Color(0xFF1A1D29)
 val InkSecondary = Color(0xFF6B7280)
@@ -65,10 +75,15 @@ fun ScheduleApp(viewModel: ScheduleViewModel = viewModel()) {
     }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
+    // 细腻的浅蓝白渐变背景：底部略深、顶部通透，比纯色更有层次
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background)
+            .background(
+                Brush.verticalGradient(
+                    listOf(Color(0xFFEAF1FB), Background, Color(0xFFF1F4FA))
+                )
+            )
     ) {
         MaterialTheme {
             Column(
@@ -77,41 +92,47 @@ fun ScheduleApp(viewModel: ScheduleViewModel = viewModel()) {
                     .padding(horizontal = 20.dp)
                     .padding(top = 16.dp)
             ) {
-                if (!state.loggedIn) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState()),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Spacer(Modifier.height(48.dp))
-                        AppLogo()
-                        Spacer(Modifier.height(36.dp))
-                        LoginForm(
-                            baseUrl = state.baseUrl, onBaseUrl = viewModel::onBaseUrlChange,
-                            username = state.username, onUsername = viewModel::onUsernameChange,
-                            password = state.password, onPassword = viewModel::onPasswordChange,
-                            showPassword = state.showPassword, onToggleShowPassword = viewModel::onToggleShowPassword,
-                            xnm = state.xnm, onXnm = viewModel::onXnmChange,
-                            term = state.term, onTerm = viewModel::onTermChange,
+                Crossfade(
+                    targetState = state.loggedIn,
+                    animationSpec = tween(320),
+                    label = "login"
+                ) { loggedIn ->
+                    if (!loggedIn) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .verticalScroll(rememberScrollState()),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Spacer(Modifier.height(48.dp))
+                            AppLogo()
+                            Spacer(Modifier.height(36.dp))
+                            LoginForm(
+                                baseUrl = state.baseUrl, onBaseUrl = viewModel::onBaseUrlChange,
+                                username = state.username, onUsername = viewModel::onUsernameChange,
+                                password = state.password, onPassword = viewModel::onPasswordChange,
+                                showPassword = state.showPassword, onToggleShowPassword = viewModel::onToggleShowPassword,
+                                xnm = state.xnm, onXnm = viewModel::onXnmChange,
+                                term = state.term, onTerm = viewModel::onTermChange,
+                                busy = state.busy,
+                                onLogin = viewModel::login
+                            )
+                        }
+                    } else {
+                        ScheduleScreen(
+                            modifier = Modifier.weight(1f),
+                            courses = state.courses,
+                            username = state.username,
+                            status = state.status,
+                            lastFetched = state.lastFetched,
+                            dailyOn = state.dailyOn,
                             busy = state.busy,
-                            onLogin = viewModel::login
+                            onRefresh = viewModel::refresh,
+                            onToggleDaily = viewModel::toggleDaily,
+                            onLogout = viewModel::logout
                         )
                     }
-                } else {
-                    ScheduleScreen(
-                        modifier = Modifier.weight(1f),
-                        courses = state.courses,
-                        username = state.username,
-                        status = state.status,
-                        lastFetched = state.lastFetched,
-                        dailyOn = state.dailyOn,
-                        busy = state.busy,
-                        onRefresh = viewModel::refresh,
-                        onToggleDaily = viewModel::toggleDaily,
-                        onLogout = viewModel::logout
-                    )
                 }
             }
         }
@@ -125,7 +146,7 @@ fun AppLogo() {
             painter = painterResource(R.drawable.ic_launcher_logo),
             contentDescription = "校徽",
             modifier = Modifier
-                .size(72.dp)
+                .size(76.dp)
                 .clip(CircleShape)
         )
         Spacer(Modifier.height(14.dp))
@@ -142,7 +163,7 @@ fun CleanCard(
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = Surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
@@ -275,20 +296,35 @@ fun ScheduleScreen(
 ) {
     var tab by remember { mutableStateOf(0) }
     Column(modifier.fillMaxWidth().fillMaxHeight()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        // 渐变品牌头：深蓝 → 亮蓝，白字标题 + 日期/学号
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(
+                    Brush.horizontalGradient(listOf(Color(0xFF16396B), AccentLight))
+                )
+                .padding(horizontal = 20.dp, vertical = 18.dp)
         ) {
-            Text(
-                if (tab == 0) "我的课表" else "我的",
-                fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink
-            )
-            Text(
-                username,
-                fontSize = 12.sp, color = InkTertiary
-            )
+            Column {
+                Text(
+                    if (tab == 0) "我的课表" else "我的",
+                    fontSize = 21.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    if (tab == 0)
+                        SimpleDateFormat("M月d日 EEEE", Locale.CHINA).format(Date())
+                    else
+                        "学号 $username",
+                    fontSize = 12.sp,
+                    color = Color.White.copy(alpha = 0.78f)
+                )
+            }
         }
+        Spacer(Modifier.height(14.dp))
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -311,28 +347,39 @@ fun BottomNavBar(tab: Int, onTab: (Int) -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+            .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
             .background(Surface)
-            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
         Row(
             Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            listOf("课表", "我的").forEachIndexed { i, name ->
+            val tabs = listOf(
+                "课表" to Icons.Filled.DateRange,
+                "我的" to Icons.Filled.Person
+            )
+            tabs.forEachIndexed { i, (name, icon) ->
                 val selected = tab == i
-                Box(
+                Column(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(RoundedCornerShape(12.dp))
                         .background(if (selected) Accent else Color.Transparent)
                         .clickable { onTab(i) }
-                        .padding(vertical = 11.dp),
-                    contentAlignment = Alignment.Center
+                        .padding(vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = name,
+                        tint = if (selected) Color.White else InkSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.height(2.dp))
                     Text(
                         name,
-                        fontSize = 14.sp,
+                        fontSize = 11.sp,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                         color = if (selected) Color.White else InkSecondary
                     )
@@ -350,6 +397,13 @@ fun ScheduleHome(
     busy: Boolean,
     onRefresh: () -> Unit
 ) {
+    // ---- 今日概览卡：今天几节课、下一节是什么 -------
+    val list = courses
+    if (list != null) {
+        TodayOverviewCard(list)
+        Spacer(Modifier.height(14.dp))
+    }
+
     CleanCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -371,13 +425,19 @@ fun ScheduleHome(
     }
     Spacer(Modifier.height(16.dp))
 
-    val list = courses
     if (list == null) {
         CleanCard {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)
             ) {
+                Icon(
+                    imageVector = Icons.Filled.DateRange,
+                    contentDescription = null,
+                    tint = InkTertiary,
+                    modifier = Modifier.size(34.dp)
+                )
+                Spacer(Modifier.height(8.dp))
                 Text("尚未拉取课表", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Ink)
                 Spacer(Modifier.height(6.dp))
                 Text("点击「立即刷新」获取最新安排", fontSize = 12.sp, color = InkTertiary)
@@ -505,6 +565,53 @@ fun ScheduleHome(
     }
 }
 
+/** 今日概览：渐变浅蓝卡，显示今天课程数与下一节 */
+@Composable
+fun TodayOverviewCard(courses: List<Course>) {
+    val now = Calendar.getInstance()
+    val todayIndex =
+        if (now.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) 7 else now.get(Calendar.DAY_OF_WEEK) - 1
+    val todayCourses = remember(courses, todayIndex) {
+        courses.filter { it.day == todayIndex }
+            .sortedBy { it.sections.minOrNull() ?: 0 }
+    }
+    val next = todayCourses.firstOrNull()
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(
+                Brush.horizontalGradient(listOf(Accent.copy(alpha = 0.10f), AccentLight.copy(alpha = 0.16f)))
+            )
+            .padding(18.dp)
+    ) {
+        Column {
+            Text(
+                "今天 · ${SimpleDateFormat("M月d日 EEEE", Locale.CHINA).format(Date())}",
+                fontSize = 12.sp, color = InkSecondary
+            )
+            Spacer(Modifier.height(6.dp))
+            if (todayCourses.isEmpty()) {
+                Text(
+                    "今天没有课，好好休息",
+                    fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Ink
+                )
+            } else {
+                Text(
+                    "今天 ${todayCourses.size} 节课",
+                    fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Ink
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "下一节：${next!!.name}（第${next.sections.minOrNull()}节 · ${next.position.ifBlank { "地点待定" }}）",
+                    fontSize = 12.sp, color = Accent, fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
 @Composable
 fun ProfilePage(
     username: String,
@@ -517,15 +624,13 @@ fun ProfilePage(
 
     CleanCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
+            Image(
+                painter = painterResource(R.drawable.ic_launcher_logo),
+                contentDescription = "校徽",
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape)
-                    .background(Accent.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("恩", color = Accent, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            }
+            )
             Spacer(Modifier.width(14.dp))
             Column {
                 Text("恩施学院课表", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Ink)
@@ -561,6 +666,15 @@ fun ProfilePage(
                 Spacer(Modifier.height(2.dp))
                 Text(lastFetched, fontSize = 12.sp, color = InkSecondary)
             }
+        }
+    }
+    Spacer(Modifier.height(12.dp))
+
+    CleanCard {
+        Column {
+            Text("桌面小组件", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Ink)
+            Spacer(Modifier.height(2.dp))
+            Text("长按桌面空白处 → 添加小组件 → 选择「恩施学院课表」，即可在桌面查看今日课程，随刷新自动更新。", fontSize = 11.sp, color = InkTertiary)
         }
     }
     Spacer(Modifier.height(24.dp))

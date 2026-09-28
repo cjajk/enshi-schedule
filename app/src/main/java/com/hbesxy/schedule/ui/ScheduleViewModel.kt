@@ -10,6 +10,7 @@ import com.hbesxy.schedule.model.TermMap
 import com.hbesxy.schedule.net.ZhengFangClient
 import com.hbesxy.schedule.parser.ScheduleParser
 import com.hbesxy.schedule.worker.ScheduleRefreshWorker
+import com.hbesxy.schedule.widget.ScheduleWidgetProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -132,6 +133,9 @@ class ScheduleViewModel(application: Application) : AndroidViewModel(application
                     } else {
                         current.copy(status = msg)
                     }
+                }
+                if (snapshot != null) {
+                    ScheduleWidgetProvider.refresh(getApplication())
                 }
             } catch (e: Exception) {
                 _uiState.update {

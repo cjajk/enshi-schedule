@@ -14,6 +14,7 @@ import com.hbesxy.schedule.model.TermMap
 import com.hbesxy.schedule.net.ZhengFangClient
 import com.hbesxy.schedule.notify.ChangeNotifier
 import com.hbesxy.schedule.parser.ScheduleParser
+import com.hbesxy.schedule.widget.ScheduleWidgetProvider
 import org.json.JSONArray
 import java.util.concurrent.TimeUnit
 
@@ -45,6 +46,7 @@ class ScheduleRefreshWorker(
                 "检测到课表发生变化，共 ${courses.size} 门课程，请打开 App 查看最新安排。"
             )
         }
+        ScheduleWidgetProvider.refresh(applicationContext)
         return Result.success()
     }
 

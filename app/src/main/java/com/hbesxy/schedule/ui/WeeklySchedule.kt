@@ -32,6 +32,17 @@ fun WeeklyScheduleGrid(courses: List<Course>) {
         val dow = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)
         if (dow == Calendar.SUNDAY) 7 else dow - 1
     }
+    // 本周一..周日的日期（用于表头），周日归属本周
+    val weekDates = remember {
+        val now = Calendar.getInstance()
+        val dow = now.get(Calendar.DAY_OF_WEEK)
+        val diff = if (dow == Calendar.SUNDAY) 6 else dow - Calendar.MONDAY
+        val monday = (now.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -diff) }
+        (0..6).map { off ->
+            val c = (monday.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, off) }
+            c.get(Calendar.DAY_OF_MONTH)
+        }
+    }
 
     val palette = listOf(
         Color(0xFFE8F0FE), Color(0xFFFCE8EC), Color(0xFFE6F4EA),
@@ -53,7 +64,7 @@ fun WeeklyScheduleGrid(courses: List<Course>) {
                 Box(
                     modifier = Modifier
                         .width(dayColumnWidth)
-                        .padding(vertical = 4.dp),
+                        .padding(vertical = 6.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -63,14 +74,24 @@ fun WeeklyScheduleGrid(courses: List<Course>) {
                             fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
                             color = if (isToday) Accent else InkSecondary
                         )
+                        Spacer(Modifier.height(1.dp))
+                        Text(
+                            "${weekDates[d - 1]}",
+                            fontSize = 10.sp,
+                            color = if (isToday) AccentLight else InkTertiary,
+                            fontWeight = if (isToday) FontWeight.SemiBold else FontWeight.Normal
+                        )
                         if (isToday) {
-                            Spacer(Modifier.height(2.dp))
-                            Box(
-                                Modifier
-                                    .width(4.dp)
-                                    .height(4.dp)
-                                    .clip(RoundedCornerShape(2.dp))
-                                    .background(Accent)
+                            Spacer(Modifier.height(3.dp))
+                            Text(
+                                "今天",
+                                fontSize = 9.sp,
+                                color = Accent,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(7.dp))
+                                    .background(Accent.copy(alpha = 0.1f))
+                                    .padding(horizontal = 7.dp, vertical = 2.dp)
                             )
                         }
                     }
@@ -103,7 +124,7 @@ fun WeeklyScheduleGrid(courses: List<Course>) {
                         modifier = Modifier
                             .width(dayColumnWidth)
                             .height(slotHeight * maxSection)
-                            .background(if (isToday) Accent.copy(alpha = 0.03f) else Color.Transparent)
+                            .background(if (isToday) Accent.copy(alpha = 0.04f) else Color.Transparent)
                     ) {
                         Column(Modifier.fillMaxSize()) {
                             repeat(maxSection) {
@@ -127,8 +148,9 @@ fun WeeklyScheduleGrid(courses: List<Course>) {
                                     .offset(y = slotHeight * (start - 1))
                                     .width(dayColumnWidth - 6.dp)
                                     .height(slotHeight * span - 4.dp)
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .clip(RoundedCornerShape(10.dp))
                                     .background(palette[idx])
+                                    .border(0.5.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
                                     .padding(7.dp)
                             ) {
                                 Column {

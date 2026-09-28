@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">恩施学院课表</string>
+    <string name="widget_title">今日课表</string>
+    <string name="widget_desc">在桌面查看今天的课程安排，随课表刷新自动更新</string>
 </resources>
