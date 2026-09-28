@@ -11,6 +11,9 @@ import com.hbesxy.schedule.model.ScheduleSnapshot
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 private val Context.dataStore by preferencesDataStore(name = "schedule_prefs")
 
@@ -25,6 +28,7 @@ class ScheduleRepository(private val context: Context) {
         val SNAPSHOT_JSON = stringPreferencesKey("snapshot_json")
         val FETCHED_AT = longPreferencesKey("fetched_at")
         val CURRENT_WEEK = intPreferencesKey("current_week")
+        val TERM_START = stringPreferencesKey("term_start")
     }
 
     val defaultBaseUrl = "http://jw.hbesxy.net"
@@ -82,9 +86,38 @@ class ScheduleRepository(private val context: Context) {
         return p[Keys.FETCHED_AT] ?: 0L
     }
 
-    /** 当前教学周（用于过滤周课表/今日概览/小组件），默认第 1 周 */
+    /** 开学日期（yyyy-MM-dd，开学第一周的周一），未设置返回 null */
+    suspend fun getTermStart(): String? {
+        val p = context.dataStore.data.first()
+        return p[Keys.TERM_START]?.takeIf { it.isNotBlank() }
+    }
+
+    suspend fun saveTermStart(date: String) {
+        context.dataStore.edit { p ->
+            p[Keys.TERM_START] = date
+        }
+    }
+
+    /**
+     * 当前教学周：设置了开学日期则自动计算（开学所在周为第 1 周），
+     * 未设置时退回手动保存的周次（兼容旧版本）。
+     */
     suspend fun getCurrentWeek(): Int {
         val p = context.dataStore.data.first()
+        val start = p[Keys.TERM_START]?.takeIf { it.isNotBlank() }
+        if (start != null) {
+            val parsed = try {
+                SimpleDateFormat("yyyy-MM-dd", Locale.CHINA).parse(start)
+            } catch (e: Exception) { null }
+            if (parsed != null) {
+                val today = Calendar.getInstance()
+                val startCal = Calendar.getInstance().apply { time = parsed }
+                val millisPerDay = 24 * 60 * 60 * 1000L
+                val days = ((today.timeInMillis - startCal.timeInMillis) / millisPerDay).toInt()
+                val week = if (days < 0) 1 else (days / 7) + 1
+                return week.coerceIn(1, 30)
+            }
+        }
         return (p[Keys.CURRENT_WEEK] ?: 1).coerceIn(1, 30)
     }
 

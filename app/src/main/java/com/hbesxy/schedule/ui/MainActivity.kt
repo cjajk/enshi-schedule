@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hbesxy.schedule.R
 import com.hbesxy.schedule.model.Course
+import com.hbesxy.schedule.model.HolidayCalendar
 import com.hbesxy.schedule.notify.ChangeNotifier
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -151,9 +152,10 @@ fun ScheduleApp(
                             status = state.status,
                             lastFetched = state.lastFetched,
                             currentWeek = state.currentWeek,
+                            termStart = state.termStart,
                             dailyOn = state.dailyOn,
                             busy = state.busy,
-                            onCurrentWeekChange = viewModel::onCurrentWeekChange,
+                            onTermStartChange = viewModel::onTermStartChange,
                             onRefresh = viewModel::refresh,
                             onToggleDaily = viewModel::toggleDaily,
                             onLogout = viewModel::logout
@@ -317,9 +319,10 @@ fun ScheduleScreen(
     status: String,
     lastFetched: String,
     currentWeek: Int,
+    termStart: String,
     dailyOn: Boolean,
     busy: Boolean,
-    onCurrentWeekChange: (String) -> Unit,
+    onTermStartChange: (String) -> Unit,
     onRefresh: () -> Unit,
     onToggleDaily: (Boolean) -> Unit,
     onLogout: () -> Unit
@@ -364,7 +367,7 @@ fun ScheduleScreen(
             if (tab == 0) {
                 ScheduleHome(courses = courses, status = status, lastFetched = lastFetched, currentWeek = currentWeek, busy = busy, onRefresh = onRefresh)
             } else {
-                ProfilePage(username = username, lastFetched = lastFetched, dailyOn = dailyOn, currentWeek = currentWeek, onCurrentWeekChange = onCurrentWeekChange, onToggleDaily = onToggleDaily, onLogout = onLogout)
+                ProfilePage(username = username, lastFetched = lastFetched, dailyOn = dailyOn, currentWeek = currentWeek, termStart = termStart, onTermStartChange = onTermStartChange, onToggleDaily = onToggleDaily, onLogout = onLogout)
             }
         }
         BottomNavBar(tab = tab, onTab = onTab)
@@ -601,7 +604,7 @@ fun ScheduleHome(
     }
 }
 
-/** 今日概览：渐变浅蓝卡，显示今天课程数与下一节 */
+/** 今日概览：渐变浅蓝卡，显示今天课程数与下一节；法定节假日显示放假 */
 @Composable
 fun TodayOverviewCard(courses: List<Course>) {
     val now = Calendar.getInstance()
@@ -612,23 +615,40 @@ fun TodayOverviewCard(courses: List<Course>) {
             .sortedBy { it.sections.minOrNull() ?: 0 }
     }
     val next = todayCourses.firstOrNull()
+    val holiday = HolidayCalendar.holidayName(now)
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
             .background(
-                Brush.horizontalGradient(listOf(Accent.copy(alpha = 0.10f), AccentLight.copy(alpha = 0.16f)))
+                if (holiday != null)
+                    Brush.horizontalGradient(listOf(ErrorRed.copy(alpha = 0.08f), ErrorRed.copy(alpha = 0.14f)))
+                else
+                    Brush.horizontalGradient(listOf(Accent.copy(alpha = 0.10f), AccentLight.copy(alpha = 0.16f)))
             )
             .padding(18.dp)
     ) {
         Column {
             Text(
-                "今天 · ${SimpleDateFormat("M月d日 EEEE", Locale.CHINA).format(Date())}",
+                if (holiday != null)
+                    "今天 · ${SimpleDateFormat("M月d日 EEEE", Locale.CHINA).format(Date())} · $holiday"
+                else
+                    "今天 · ${SimpleDateFormat("M月d日 EEEE", Locale.CHINA).format(Date())}",
                 fontSize = 12.sp, color = InkSecondary
             )
             Spacer(Modifier.height(6.dp))
-            if (todayCourses.isEmpty()) {
+            if (holiday != null) {
+                Text(
+                    "$holiday 放假中",
+                    fontSize = 17.sp, fontWeight = FontWeight.Bold, color = ErrorRed
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "国家法定节假日，课表课程今日不安排",
+                    fontSize = 12.sp, color = InkSecondary
+                )
+            } else if (todayCourses.isEmpty()) {
                 Text(
                     "今天没有课，好好休息",
                     fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Ink
@@ -654,7 +674,8 @@ fun ProfilePage(
     lastFetched: String,
     dailyOn: Boolean,
     currentWeek: Int,
-    onCurrentWeekChange: (String) -> Unit,
+    termStart: String,
+    onTermStartChange: (String) -> Unit,
     onToggleDaily: (Boolean) -> Unit,
     onLogout: () -> Unit
 ) {
@@ -680,18 +701,38 @@ fun ProfilePage(
     Spacer(Modifier.height(12.dp))
 
     CleanCard {
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("开学日期", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Ink)
+                    Spacer(Modifier.height(2.dp))
+                    Text("填开学第一周的周一，自动算当前周 · 现在第 $currentWeek 周", fontSize = 11.sp, color = InkTertiary)
+                }
+                CleanTextField(
+                    value = termStart,
+                    onValueChange = onTermStartChange,
+                    modifier = Modifier.width(128.dp),
+                    label = "yyyy-MM-dd"
+                )
+            }
+            if (termStart.isBlank()) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "例：秋季 9 月开学填 2026-08-31，填入后周课表/小组件自动按周显示",
+                    fontSize = 10.sp, color = ErrorRed
+                )
+            }
+        }
+    }
+    Spacer(Modifier.height(12.dp))
+
+    CleanCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("当前教学周", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Ink)
+                Text("国家法定节假日", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Ink)
                 Spacer(Modifier.height(2.dp))
-                Text("周课表与小组件只显示本周课程，调课后记得更新", fontSize = 11.sp, color = InkTertiary)
+                Text("内置 2026 年官方放假安排，节假日当天自动隐藏课程并显示\"假期快乐\"", fontSize = 11.sp, color = InkTertiary)
             }
-            CleanTextField(
-                value = currentWeek.toString(),
-                onValueChange = onCurrentWeekChange,
-                modifier = Modifier.width(72.dp),
-                label = "第几周"
-            )
         }
     }
     Spacer(Modifier.height(12.dp))

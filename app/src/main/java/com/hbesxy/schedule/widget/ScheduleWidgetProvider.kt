@@ -11,6 +11,7 @@ import android.widget.RemoteViews
 import com.hbesxy.schedule.R
 import com.hbesxy.schedule.data.ScheduleRepository
 import com.hbesxy.schedule.model.Course
+import com.hbesxy.schedule.model.HolidayCalendar
 import com.hbesxy.schedule.ui.MainActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -55,10 +56,11 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
         )
         views.setOnClickPendingIntent(R.id.widget_root, open)
 
-        // 标题日期（今天）+ 当前教学周
+        // 标题日期（今天）+ 当前教学周；法定节假日显示节日名
         val now = Calendar.getInstance()
         val todayIndex =
             if (now.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) 7 else now.get(Calendar.DAY_OF_WEEK) - 1
+        val holiday = HolidayCalendar.holidayName(now)
         val currentWeek = runBlocking(Dispatchers.IO) {
             try {
                 ScheduleRepository(context).getCurrentWeek()
@@ -68,10 +70,11 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
         }
         views.setTextViewText(
             R.id.widget_date,
-            SimpleDateFormat("M月d日 EEE", Locale.CHINA).format(Date()) + " · 第${currentWeek}周"
+            SimpleDateFormat("M月d日 EEE", Locale.CHINA).format(Date()) +
+                if (holiday != null) " · $holiday" else " · 第${currentWeek}周"
         )
 
-        // 本地已保存课表 → 今天的课程（只显示当前教学周）
+        // 本地已保存课表 → 今天的课程（只显示当前教学周）；法定节假日不排课
         val saved = runBlocking(Dispatchers.IO) {
             try {
                 ScheduleRepository(context).getSavedCourses()
@@ -79,10 +82,14 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
                 null
             }
         }
-        val todayCourses = saved
-            ?.filter { it.day == todayIndex && (it.weeks.isEmpty() || it.weeks.contains(currentWeek)) }
-            ?.sortedBy { it.sections.minOrNull() ?: 0 }
-            ?: emptyList()
+        val todayCourses = if (holiday != null) {
+            emptyList()
+        } else {
+            saved
+                ?.filter { it.day == todayIndex && (it.weeks.isEmpty() || it.weeks.contains(currentWeek)) }
+                ?.sortedBy { it.sections.minOrNull() ?: 0 }
+                ?: emptyList()
+        }
 
         val maxRows = 4
         for (i in 1..maxRows) {
@@ -98,6 +105,7 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
 
         // 空状态与底部提示
         val emptyText = when {
+            holiday != null -> "$holiday 快乐 · 放假中"
             saved == null -> "打开 App 登录后自动显示今日课表"
             todayCourses.isEmpty() -> "今天没有课，好好休息"
             else -> "今日 ${todayCourses.size} 节课"
@@ -105,12 +113,14 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
         views.setTextViewText(R.id.widget_empty, emptyText)
         views.setViewVisibility(
             R.id.widget_empty,
-            if (todayCourses.isEmpty() || saved == null) View.VISIBLE else View.GONE
+            if (todayCourses.isEmpty() || saved == null || holiday != null) View.VISIBLE else View.GONE
         )
         val more = todayCourses.size - maxRows
         views.setTextViewText(
             R.id.widget_hint,
-            if (more > 0) "还有 $more 节课 · 点击查看全部" else "点击查看全部课表"
+            if (holiday != null) "假期快乐，好好休息"
+            else if (more > 0) "还有 $more 节课 · 点击查看全部"
+            else "点击查看全部课表"
         )
 
         manager.updateAppWidget(id, views)

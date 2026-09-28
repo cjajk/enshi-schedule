@@ -18,6 +18,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hbesxy.schedule.model.Course
+import com.hbesxy.schedule.model.HolidayCalendar
 import java.util.Calendar
 
 @Composable
@@ -32,17 +33,19 @@ fun WeeklyScheduleGrid(courses: List<Course>) {
         val dow = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)
         if (dow == Calendar.SUNDAY) 7 else dow - 1
     }
-    // 本周一..周日的日期（用于表头），周日归属本周
-    val weekDates = remember {
+    // 本周一..周日的日期（用于表头与放假判断），周日归属本周
+    val weekDays = remember {
         val now = Calendar.getInstance()
         val dow = now.get(Calendar.DAY_OF_WEEK)
         val diff = if (dow == Calendar.SUNDAY) 6 else dow - Calendar.MONDAY
         val monday = (now.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -diff) }
         (0..6).map { off ->
-            val c = (monday.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, off) }
-            c.get(Calendar.DAY_OF_MONTH)
+            (monday.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, off) }
         }
     }
+    val weekDates = remember(weekDays) { weekDays.map { it.get(Calendar.DAY_OF_MONTH) } }
+    // 法定节假日：放假那列隐藏课程并显示节日名；null 表示正常上课
+    val holidayOfDay = remember(weekDays) { weekDays.map { HolidayCalendar.holidayName(it) } }
 
     val palette = listOf(
         Color(0xFFE8F0FE), Color(0xFFFCE8EC), Color(0xFFE6F4EA),
@@ -61,6 +64,7 @@ fun WeeklyScheduleGrid(courses: List<Course>) {
             Spacer(Modifier.width(timeColumnWidth))
             for (d in 1..7) {
                 val isToday = d == todayIndex
+                val holiday = holidayOfDay[d - 1]
                 Box(
                     modifier = Modifier
                         .width(dayColumnWidth)
@@ -72,16 +76,30 @@ fun WeeklyScheduleGrid(courses: List<Course>) {
                             dayNames[d - 1],
                             fontSize = 13.sp,
                             fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isToday) Accent else InkSecondary
+                            color = if (holiday != null) ErrorRed
+                            else if (isToday) Accent else InkSecondary
                         )
                         Spacer(Modifier.height(1.dp))
                         Text(
-                            "${weekDates[d - 1]}",
+                            if (holiday != null) holiday else "${weekDates[d - 1]}",
                             fontSize = 10.sp,
-                            color = if (isToday) AccentLight else InkTertiary,
-                            fontWeight = if (isToday) FontWeight.SemiBold else FontWeight.Normal
+                            color = if (holiday != null) ErrorRed
+                            else if (isToday) AccentLight else InkTertiary,
+                            fontWeight = if (holiday != null || isToday) FontWeight.SemiBold else FontWeight.Normal
                         )
-                        if (isToday) {
+                        if (holiday != null) {
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                "放假",
+                                fontSize = 9.sp,
+                                color = ErrorRed,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(7.dp))
+                                    .background(ErrorRed.copy(alpha = 0.08f))
+                                    .padding(horizontal = 7.dp, vertical = 2.dp)
+                            )
+                        } else if (isToday) {
                             Spacer(Modifier.height(3.dp))
                             Text(
                                 "今天",
@@ -120,11 +138,18 @@ fun WeeklyScheduleGrid(courses: List<Course>) {
             Row(Modifier.horizontalScroll(scrollState)) {
                 for (d in 1..7) {
                     val isToday = d == todayIndex
+                    val holiday = holidayOfDay[d - 1]
                     Box(
                         modifier = Modifier
                             .width(dayColumnWidth)
                             .height(slotHeight * maxSection)
-                            .background(if (isToday) Accent.copy(alpha = 0.04f) else Color.Transparent)
+                            .background(
+                                when {
+                                    holiday != null -> ErrorRed.copy(alpha = 0.06f)
+                                    isToday -> Accent.copy(alpha = 0.04f)
+                                    else -> Color.Transparent
+                                }
+                            )
                     ) {
                         Column(Modifier.fillMaxSize()) {
                             repeat(maxSection) {
@@ -137,49 +162,71 @@ fun WeeklyScheduleGrid(courses: List<Course>) {
                             }
                         }
 
-                        for (c in coursesByDay[d].orEmpty()) {
-                            val start = c.sections.minOrNull() ?: continue
-                            val end = c.sections.maxOrNull() ?: start
-                            val span = (end - start + 1).coerceAtLeast(1)
-                            val idx = colorIndex(c.name)
+                        if (holiday != null) {
+                            // 法定节假日：整列显示放假，不排课程
                             Box(
-                                modifier = Modifier
-                                    .padding(horizontal = 3.dp, vertical = 2.dp)
-                                    .offset(y = slotHeight * (start - 1))
-                                    .width(dayColumnWidth - 6.dp)
-                                    .height(slotHeight * span - 4.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(palette[idx])
-                                    .border(0.5.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
-                                    .padding(7.dp)
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Column {
-                                    Box(
-                                        Modifier
-                                            .width(3.dp)
-                                            .height(14.dp)
-                                            .clip(RoundedCornerShape(1.5.dp))
-                                            .background(accentDots[idx])
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        "🎉",
+                                        fontSize = 18.sp
                                     )
                                     Spacer(Modifier.height(4.dp))
                                     Text(
-                                        c.name,
-                                        fontSize = 11.sp,
+                                        "$holiday 放假",
+                                        fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = Ink,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                        lineHeight = 14.sp
+                                        color = ErrorRed
                                     )
-                                    if (c.position.isNotBlank() && span >= 2) {
-                                        Spacer(Modifier.height(3.dp))
-                                        Text(
-                                            c.position,
-                                            fontSize = 9.sp,
-                                            color = InkSecondary,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
+                                }
+                            }
+                        } else {
+                            for (c in coursesByDay[d].orEmpty()) {
+                                val start = c.sections.minOrNull() ?: continue
+                                val end = c.sections.maxOrNull() ?: start
+                                val span = (end - start + 1).coerceAtLeast(1)
+                                val idx = colorIndex(c.name)
+                                Box(
+                                    modifier = Modifier
+                                        .padding(horizontal = 3.dp, vertical = 2.dp)
+                                        .offset(y = slotHeight * (start - 1))
+                                        .width(dayColumnWidth - 6.dp)
+                                        .height(slotHeight * span - 4.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(palette[idx])
+                                        .border(0.5.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
+                                        .padding(7.dp)
+                                ) {
+                                    Column {
+                                        Box(
+                                            Modifier
+                                                .width(3.dp)
+                                                .height(14.dp)
+                                                .clip(RoundedCornerShape(1.5.dp))
+                                                .background(accentDots[idx])
                                         )
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            c.name,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Ink,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                            lineHeight = 14.sp
+                                        )
+                                        if (c.position.isNotBlank() && span >= 2) {
+                                            Spacer(Modifier.height(3.dp))
+                                            Text(
+                                                c.position,
+                                                fontSize = 9.sp,
+                                                color = InkSecondary,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
                                     }
                                 }
                             }

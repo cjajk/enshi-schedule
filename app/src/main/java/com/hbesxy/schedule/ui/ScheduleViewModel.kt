@@ -35,6 +35,7 @@ data class ScheduleUiState(
     val term: String = "1",
     val loggedIn: Boolean = false,
     val currentWeek: Int = 1,
+    val termStart: String = "",
     val courses: List<Course>? = null,
     val status: String = "",
     val busy: Boolean = false,
@@ -62,6 +63,7 @@ class ScheduleViewModel(application: Application) : AndroidViewModel(application
             val at = repo.getLastFetchedAt()
             val savedCourses = repo.getSavedCourses()
             val week = repo.getCurrentWeek()
+            val termStart = repo.getTermStart() ?: ""
             val dailyOn = withContext(Dispatchers.IO) {
                 try {
                     WorkManager.getInstance(getApplication())
@@ -80,6 +82,7 @@ class ScheduleViewModel(application: Application) : AndroidViewModel(application
                     password = cred?.second ?: current.password,
                     loggedIn = cred != null,
                     currentWeek = week,
+                    termStart = termStart,
                     lastFetched = if (at > 0) formatTime(at) else current.lastFetched,
                     courses = savedCourses,
                     dailyOn = dailyOn
@@ -94,12 +97,30 @@ class ScheduleViewModel(application: Application) : AndroidViewModel(application
     fun onToggleShowPassword() = _uiState.update { it.copy(showPassword = !it.showPassword) }
     fun onXnmChange(v: String) = _uiState.update { it.copy(xnm = v) }
     fun onTermChange(v: String) = _uiState.update { it.copy(term = v.filter { c -> c.isDigit() }) }
-    /** 当前教学周（1~30），用于过滤周课表/今日概览/小组件 */
-    fun onCurrentWeekChange(v: String) {
-        val week = v.filter { c -> c.isDigit() }.take(2).toIntOrNull()?.coerceIn(1, 30)
-        if (week != null) {
-            _uiState.update { it.copy(currentWeek = week) }
-            viewModelScope.launch { repo.saveCurrentWeek(week) }
+    /** 开学日期（yyyy-MM-dd，开学第一周的周一）：保存后自动重算当前教学周 */
+    fun onTermStartChange(v: String) {
+        _uiState.update { it.copy(termStart = v) }
+        val normalized = normalizeDate(v.trim()) ?: return
+        viewModelScope.launch {
+            repo.saveTermStart(normalized)
+            val week = repo.getCurrentWeek()
+            _uiState.update { it.copy(currentWeek = week, termStart = normalized) }
+        }
+    }
+
+    /** 把用户输入的日期统一成 yyyy-MM-dd，非法返回 null */
+    private fun normalizeDate(v: String): String? {
+        val s = v.replace(".", "-").replace("/", "-")
+        val m = Regex("""(\d{4})-(\d{1,2})-(\d{1,2})""").matchEntire(s) ?: return null
+        val y = m.groupValues[1].toInt()
+        val mo = m.groupValues[2].toInt()
+        val d = m.groupValues[3].toInt()
+        if (y !in 2000..2100 || mo !in 1..12 || d !in 1..31) return null
+        return try {
+            val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.CHINA).apply { isLenient = false }
+            fmt.format(fmt.parse(String.format("%04d-%02d-%02d", y, mo, d)))
+        } catch (e: Exception) {
+            null
         }
     }
     /** 登录并首次拉取课表 */
